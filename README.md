@@ -32,7 +32,7 @@
 
 ## 1. Panoramica del Progetto
 
-**FluxHR Demo** è un'applicazione fullstack pensata come ambiente dimostrativo per la gestione delle risorse umane. Il sistema permette di:
+**humflow Demo** è un'applicazione fullstack pensata come ambiente dimostrativo per la gestione delle risorse umane. Il sistema permette di:
 
 - **Caricare CV in formato PDF** e avviarne l'analisi automatica tramite AI
 - **Gestire una dashboard candidati** con stati, statistiche e download dei documenti
@@ -88,7 +88,7 @@ L'intero stack è containerizzato con Docker Compose, rendendolo avviabile con u
                                                   └──────────────────┘
 ```
 
-Tutti i servizi comunicano sulla rete Docker interna `fluxhr-network`. L'unico punto di ingresso esposto all'host è il frontend sulla porta `3000` e le API sulla `8000`.
+Tutti i servizi comunicano sulla rete Docker interna `humflow-network`. L'unico punto di ingresso esposto all'host è il frontend sulla porta `3000` e le API sulla `8000`.
 
 **Flusso dati principale:**
 
@@ -212,7 +212,7 @@ cp .env.example .env
 
 | Variabile | Valore di default | Descrizione |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://admin:password@db:5432/fluxhr` | Stringa di connessione PostgreSQL |
+| `DATABASE_URL` | `postgresql://admin:password@db:5432/humflow` | Stringa di connessione PostgreSQL |
 | `REDIS_URL` | `redis://redis:6379/0` | Stringa di connessione Redis |
 | `SMTP_SERVER` | `mailhog` | Host SMTP (usa MailHog in demo) |
 | `SMTP_PORT` | `1025` | Porta SMTP |
@@ -221,7 +221,7 @@ cp .env.example .env
 | `SECRET_KEY` | `your-secret-key-change-in-production` | Chiave JWT — **cambiare in produzione** |
 | `POSTGRES_USER` | `admin` | Utente del database |
 | `POSTGRES_PASSWORD` | `password` | Password del database |
-| `POSTGRES_DB` | `fluxhr` | Nome del database |
+| `POSTGRES_DB` | `humflow` | Nome del database |
 
 > **Attenzione:** Le credenziali predefinite sono adatte esclusivamente all'ambiente demo. Non devono mai essere utilizzate in produzione.
 
@@ -461,7 +461,7 @@ docker compose logs -f worker
 ```bash
 docker compose exec backend bash
 docker compose exec frontend sh
-docker compose exec db psql -U admin -d fluxhr
+docker compose exec db psql -U admin -d humflow
 ```
 
 ### Eseguire le migrazioni del database (se applicabile)
@@ -505,7 +505,7 @@ Nella fase di sviluppo demo sono stati identificati e risolti i seguenti bug. Il
 
 | # | File | Problema | Fix |
 |---|---|---|---|
-| 9 | `frontend/src/Login.tsx` | Credenziali demo mostrate all'utente errate (`fluxhr2025` invece di `password`) | Corretto il suggerimento in `admin / password` |
+| 9 | `frontend/src/Login.tsx` | Credenziali demo mostrate all'utente errate (`humflow2025` invece di `password`) | Corretto il suggerimento in `admin / password` |
 
 ---
 
@@ -548,4 +548,4 @@ La variabile `DATABASE_URL` viene caricata automaticamente da `python-dotenv` se
 
 ---
 
-*Documentazione generata per il progetto [humflow-Demo](https://github.com/fabio-cerundolo/humflow-Demo) — FluxHR Demo.*
+*Documentazione generata per il progetto [humflow-Demo](https://github.com/fabio-cerundolo/humflow-Demo) — humflow Demo.*
