@@ -3,7 +3,6 @@
 </p>
 
 <br />
-# humflow-demo
 
 
 **Piattaforma HR Fullstack con Analisi CV Automatizzata e Architettura a Microservizi**
