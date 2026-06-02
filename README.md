@@ -164,7 +164,7 @@ Per lo sviluppo locale senza Docker (opzionale):
 
 ```bash
 # 1. Clona il repository
-git clone https://github.com/fabiocerundolo-bit/humflow-Demo.git
+git clone https://github.com/fabio-cerundolo/humflow-Demo.git
 cd humflow-Demo
 
 # 2. (Opzionale) Copia e configura le variabili d'ambiente
@@ -548,4 +548,4 @@ La variabile `DATABASE_URL` viene caricata automaticamente da `python-dotenv` se
 
 ---
 
-*Documentazione generata per il progetto [humflow-Demo](https://github.com/fabiocerundolo-bit/humflow-Demo) — FluxHR Demo.*
+*Documentazione generata per il progetto [humflow-Demo](https://github.com/fabio-cerundolo/humflow-Demo) — FluxHR Demo.*
