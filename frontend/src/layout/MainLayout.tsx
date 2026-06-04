@@ -1,5 +1,6 @@
 import React from 'react';
 import { LayoutDashboard, Users, GitBranch, TrendingUp, FileBarChart, Calendar, Shield, LogOut, Moon, Sun } from 'lucide-react';
+import LogoSvg from '../assets/logo.svg'; 
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -29,18 +30,18 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   ];
 
   return (
-    // Sfondo principale: grigio chiaro in light, grigio scuro in dark
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900 font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300">
       
       {/* Sidebar */}
       <aside className="w-72 bg-white border-r border-gray-200 flex flex-col shrink-0 z-20 dark:bg-gray-800 dark:border-gray-700">
-        <div className="p-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">H</span>
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Humflow</h1>
-          </div>
+        <div className="p-6 flex items-center gap-3">
+          {/* LOGO SVG */}
+          <img 
+            src={LogoSvg} 
+            alt="Humflow Logo" 
+            className="h-10 w-auto" 
+          />
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Humflow</h1>
         </div>
 
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto py-4">
