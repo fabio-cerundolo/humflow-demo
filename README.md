@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-banner.svg" alt="humflow-demo Banner" width="550" />
+  <img src="/frontend/src/assets/logo-banner.svg" alt="humflow-demo Banner" width="550" />
 </p>
 
 <br />
