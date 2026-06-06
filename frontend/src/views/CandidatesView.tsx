@@ -68,9 +68,10 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
       {/* ========================================== */}
       <aside className="w-full md:w-72 shrink-0 sticky top-24 self-start space-y-4">
         
-        {/* Card Filtri */}
-        <Card title="Filtri e Ricerca" className="shadow-sm">
-          <div className="space-y-5">
+                {/* Card Filtri */}
+        <Card title="Filtri e Ricerca" className="shadow-sm flex flex-col">
+          <div className="space-y-5 flex-1">
+            {/* Ricerca Testuale */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Cerca
@@ -88,6 +89,7 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
               </div>
             </div>
 
+            {/* Filtra per Competenze */}
             {availableSkills.length > 0 && (
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
@@ -112,13 +114,20 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                 </div>
               </div>
             )}
-
-            {(searchTerm || selectedSkills.length > 0) && (
-              <Button variant="outline" onClick={resetFilters} className="w-full text-xs py-2 justify-center mt-2">
-                <X size={14} className="mr-1.5" /> Resetta filtri
-              </Button>
-            )}
           </div>
+
+          {/* Pulsante Reset: separato visivamente e perfettamente allineato in basso */}
+          {(searchTerm || selectedSkills.length > 0) && (
+            <div className="pt-4 mt-5 border-t border-gray-100 dark:border-gray-700">
+              <Button 
+                variant="outline" 
+                onClick={resetFilters} 
+                className="w-full text-xs py-2.5 justify-center font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-600"
+              >
+                Resetta filtri
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* Card Drag & Drop (Sposta qui, sotto i filtri) */}
