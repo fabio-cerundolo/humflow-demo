@@ -2,49 +2,45 @@ services:
   # DATABASE: Porta 5433 per evitare conflitti con il sistema host
   db:
     image: postgres:16
-    container_name: fluxhr-db
     environment:
-      POSTGRES_DB: fluxhr
+      POSTGRES_DB: humflow
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: password
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d fluxhr"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d humflow"]
       interval: 5s
       timeout: 5s
       retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - fluxhr-network
+      - humflow-network
 
   # CACHE & BROKER
   redis:
     image: redis:7-alpine
-    container_name: fluxhr-redis
     networks:
-      - fluxhr-network
+      - humflow-network
 
   # MAIL TESTER
   mailhog:
     image: mailhog/mailhog
-    container_name: fluxhr-mailhog
     ports:
       - "1025:1025"
       - "8025:8025"
     networks:
-      - fluxhr-network
+      - humflow-network
 
   # BACKEND API
   backend:
     build: ./backend
-    container_name: fluxhr-backend
     volumes:
       - ./backend:/app
       - uploads_data:/app/uploads
     environment:
-      - DATABASE_URL=postgresql://admin:password@db:5432/fluxhr
+      - DATABASE_URL=postgresql://admin:password@db:5432/humflow
       - REDIS_URL=redis://redis:6379/0
       - SMTP_SERVER=mailhog
       - SMTP_PORT=1025
@@ -58,18 +54,17 @@ services:
       redis:
         condition: service_started
     networks:
-      - fluxhr-network
+      - humflow-network
 
   # CELERY WORKER
   worker:
     build: ./backend
-    container_name: fluxhr-worker
     command: celery -A app.worker.celery_app worker --beat --loglevel=info
     volumes:
       - ./backend:/app
       - uploads_data:/app/uploads
     environment:
-      - DATABASE_URL=postgresql://admin:password@db:5432/fluxhr
+      - DATABASE_URL=postgresql://admin:password@db:5432/humflow
       - REDIS_URL=redis://redis:6379/0
       - SMTP_SERVER=mailhog
       - SMTP_PORT=1025
@@ -79,12 +74,11 @@ services:
       redis:
         condition: service_started
     networks:
-      - fluxhr-network
+      - humflow-network
 
   # FRONTEND REACT
   frontend:
     build: ./frontend
-    container_name: fluxhr-frontend
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -92,14 +86,14 @@ services:
       - "3000:3000"
     environment:
       - CHOKIDAR_USEPOLLING=true
-      - WDS_SOCKET_PORT=0 
+      - WDS_SOCKET_PORT=0
     depends_on:
       - backend
     networks:
-      - fluxhr-network
+      - humflow-network
 
 networks:
-  fluxhr-network:
+  humflow-network:
     driver: bridge
 
 volumes:
