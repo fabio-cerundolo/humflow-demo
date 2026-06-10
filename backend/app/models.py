@@ -10,5 +10,6 @@ class Candidate(Base):
     phone = Column(String, nullable=True)
     skills = Column(JSON, default=[])
     status = Column(String, default="new")
+    rejection_reason = Column(String, nullable=True)
     cv_file_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

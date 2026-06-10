@@ -74,7 +74,7 @@ const App: React.FC = () => {
       toggleDarkMode={() => setIsDarkMode(!isDarkMode)}
     >
       {view === 'stats' && <DashboardView stats={stats} />}
-      {view === 'candidates' && <CandidatesView {...candidatesLogic} />}
+      {view === 'candidates' && <CandidatesView  {...candidatesLogic} />}
       {view === 'pipeline' && <PipelineView candidates={candidates} updateStatus={candidatesLogic.updateStatus} />}
       {view === 'skillgap' && <SkillGapView candidates={candidates} {...skillGapLogic} />}
       {view === 'reports' && <ReportsView candidates={candidates} />}

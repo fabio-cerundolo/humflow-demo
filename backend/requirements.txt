@@ -13,3 +13,4 @@ pandas
 requests
 reportlab
 python-dotenv
+alembic

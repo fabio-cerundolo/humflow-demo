@@ -49,4 +49,5 @@ class CVParserService:
         db.commit()
         return candidate
 
+
 cv_parser = CVParserService()

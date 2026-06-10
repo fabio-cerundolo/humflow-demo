@@ -251,6 +251,7 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        {/* LOGICA DOWNLOAD REALE */}
                         <button
                           onClick={async () => {
                             try {
@@ -272,6 +273,8 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                         >
                           <Download size={16} />
                         </button>
+                        
+                        {/* LOGICA ELIMINAZIONE REALE */}
                         <button
                           onClick={() => {
                             setSelectedCandidates(new Set([c.id]));
