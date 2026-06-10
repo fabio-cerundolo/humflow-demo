@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Upload, Download, Trash2, Users, X, Filter } from 'lucide-react';
+import { Search, Upload, Download, Trash2, Users, X, Filter, AlertCircle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Pagination from '../components/ui/Pagination';
@@ -26,6 +26,7 @@ interface CandidatesViewProps {
   allSelected: boolean;
   someSelected: boolean;
   selectedCandidates: Set<number>;
+  setSelectedCandidates: (v: Set<number>) => void;
   toggleSelectAll: (v: boolean) => void;
   toggleSelectOne: (id: number, v: boolean) => void;
   showDeleteModal: boolean;
@@ -33,14 +34,15 @@ interface CandidatesViewProps {
   isDeleting: boolean;
   handleDeleteSelected: () => void;
   updateStatus: (id: number, status: string) => void;
+  api: any;
 }
 
 export const CandidatesView: React.FC<CandidatesViewProps> = ({
   searchTerm, setSearchTerm, selectedSkills, toggleSkill, resetFilters, availableSkills,
   isDragging, setIsDragging, handleDrop, uploadFiles, uploadingFiles,
   filteredCandidates, paginatedCandidates, totalCandidatePages, candidatesPage, setCandidatesPage,
-  allSelected, someSelected, selectedCandidates, toggleSelectAll, toggleSelectOne,
-  showDeleteModal, setShowDeleteModal, isDeleting, handleDeleteSelected, updateStatus
+  allSelected, someSelected, selectedCandidates, setSelectedCandidates, toggleSelectAll, toggleSelectOne,
+  showDeleteModal, setShowDeleteModal, isDeleting, handleDeleteSelected, updateStatus, api
 }) => {
   
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,20 +64,11 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
 
   return (
     <div className="flex flex-col md:flex-row gap-6 items-start">
-      
-      {/* ========================================== */}
-      {/* 1. SIDEBAR LATERALE (Sticky)               */}
-      {/* ========================================== */}
       <aside className="w-full md:w-72 shrink-0 sticky top-24 self-start space-y-4">
-        
-                {/* Card Filtri */}
         <Card title="Filtri e Ricerca" className="shadow-sm flex flex-col">
           <div className="space-y-5 flex-1">
-            {/* Ricerca Testuale */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                Cerca
-              </label>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Cerca</label>
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -89,12 +82,9 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
               </div>
             </div>
 
-            {/* Filtra per Competenze */}
             {availableSkills.length > 0 && (
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                  Competenze
-                </label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Competenze</label>
                 <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                   {availableSkills.map(skill => (
                     <button
@@ -116,7 +106,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
             )}
           </div>
 
-          {/* Pulsante Reset: separato visivamente e perfettamente allineato in basso */}
           {(searchTerm || selectedSkills.length > 0) && (
             <div className="pt-4 mt-5 border-t border-gray-100 dark:border-gray-700">
               <Button 
@@ -130,7 +119,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
           )}
         </Card>
 
-        {/* Card Drag & Drop (Sposta qui, sotto i filtri) */}
         <Card title="Carica Nuovi CV" className="shadow-sm">
           <div
             onDrop={handleDrop}
@@ -155,7 +143,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
             <p className="text-[10px] text-gray-500 dark:text-gray-400">PDF, DOCX • Upload multiplo</p>
           </div>
 
-          {/* Feedback upload compatto nella sidebar */}
           {uploadingFiles.length > 0 && (
             <div className="mt-3 space-y-2">
               <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">In caricamento</p>
@@ -176,7 +163,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
           )}
         </Card>
 
-        {/* Stats rapide */}
         <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800">
           <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
             <Filter size={18} />
@@ -191,12 +177,7 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
         </div>
       </aside>
 
-      {/* ========================================== */}
-      {/* 2. COLONNA PRINCIPALE (Solo Lista)         */}
-      {/* ========================================== */}
       <div className="flex-1 min-w-0 w-full">
-        
-        {/* Barra azione selezione multipla (appare solo se necessario) */}
         {someSelected && (
           <div className="mb-4 flex items-center justify-between p-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 animate-in fade-in slide-in-from-top-2">
             <span className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">{selectedCandidates.size} selezionati</span>
@@ -206,7 +187,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
           </div>
         )}
 
-        {/* Tabella Candidati a tutta larghezza */}
         <Card title={`Candidati (${filteredCandidates.length})`} noPadding className="shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full" aria-label="Lista candidati">
@@ -225,6 +205,7 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                   <th className="p-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Stato Pipeline</th>
                   <th className="p-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Azioni</th>
                   <th className="p-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell">Data</th>
+                  <th className="p-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Note / Stato</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -271,14 +252,31 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                     <td className="p-4">
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => alert(`Download CV di ${c.name || c.id} (Simulato)`)}
+                          onClick={async () => {
+                            try {
+                              const res = await api.get(`/candidates/${c.id}/download`, { responseType: 'blob' });
+                              const url = URL.createObjectURL(res.data);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `CV_${c.name || c.id}.pdf`;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              URL.revokeObjectURL(url);
+                            } catch { 
+                              alert('Errore nel download del CV.'); 
+                            }
+                          }}
                           className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           title="Scarica CV"
                         >
                           <Download size={16} />
                         </button>
                         <button
-                          onClick={() => { /* Logica per eliminare singolo */ }}
+                          onClick={() => {
+                            setSelectedCandidates(new Set([c.id]));
+                            setShowDeleteModal(true);
+                          }}
                           className="p-2 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
                           title="Elimina (GDPR)"
                         >
@@ -288,6 +286,16 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                     </td>
                     <td className="p-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap hidden sm:table-cell">
                       {new Date(c.created_at).toLocaleDateString('it-IT')}
+                    </td>
+                    <td className="p-4">
+                      {c.status === 'rejected' && c.rejection_reason ? (
+                        <span className="text-[10px] text-red-500 dark:text-red-400 flex items-start gap-1 font-medium">
+                          <AlertCircle size={12} className="mt-0.5 shrink-0" /> 
+                          {c.rejection_reason}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">-</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -317,7 +325,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
         </Card>
       </div>
 
-      {/* 3. Modale Eliminazione */}
       <DeleteCandidateModal 
         isOpen={showDeleteModal}
         count={selectedCandidates.size}

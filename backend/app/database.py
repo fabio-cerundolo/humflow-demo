@@ -30,7 +30,7 @@ except ImportError:
 # Per DB esterno: imposta DATABASE_URL nel file .env
 SQLALCHEMY_DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://admin:password@db:5432/fluxhr"
+    "postgresql://admin:password@db:5432/humflow"
 )
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)

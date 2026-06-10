@@ -92,25 +92,41 @@ def get_candidates(db: Session = Depends(get_db), current_user=Depends(get_curre
     return db.query(Candidate).order_by(Candidate.created_at.desc()).all()
 
 
+from fastapi import UploadFile, File, Depends
+from sqlalchemy.orm import Session
+# ... altri import esistenti ...
+
 @app.post("/upload-cv")
-async def upload_cv(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    try:
-        contents = await file.read()
-        candidate = process_cv_file(contents, file.filename, db)
-
-        # BUG #2 FIXED: il nome della funzione Celery in worker.py e'
-        # send_art14_email_task, non send_art14_email. Il vecchio import
-        # causava un ImportError ad ogni upload.
-        from .worker import send_art14_email_task
-        send_art14_email_task.delay(candidate.email, candidate.name or "Candidato")
-
-        return {"status": "ok", "candidate_id": candidate.id}
-    except Exception as e:
-        raise HTTPException(400, str(e))
+async def upload_cv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # 1. Leggi il file e processalo (questo crea il candidato nel DB)
+    file_bytes = await file.read()
+    candidate = process_cv_file(file_bytes, file.filename, db)
+    
+    # 2. LOGICA DI SCREMATURA AUTOMATICA
+    REQUIRED_SKILLS = ["python", "react", "typescript", "aws", "leadership"]
+    MIN_MATCH_THRESHOLD = 0.3  # Scarta se corrisponde a meno del 30%
+    
+    # Normalizza le skill del candidato in minuscolo per il confronto
+    cand_skills = candidate.skills if isinstance(candidate.skills, list) else []
+    extracted_lower = [skill.lower().strip() for skill in cand_skills]
+    
+    # Calcola quante skill richieste sono presenti
+    matches = [skill for skill in REQUIRED_SKILLS if skill in extracted_lower]
+    match_percentage = len(matches) / len(REQUIRED_SKILLS) if REQUIRED_SKILLS else 0
+    
+    # Aggiorna stato e motivo in base alla percentuale
+    if match_percentage < MIN_MATCH_THRESHOLD:
+        candidate.status = "rejected"
+        candidate.rejection_reason = f"Scartato auto: match Skill Gap troppo basso ({int(match_percentage * 100)}%)"
+    else:
+        candidate.status = "new"
+        candidate.rejection_reason = None
+        
+    # 3. Salva le modifiche nel database
+    db.commit()
+    db.refresh(candidate)
+    
+    return {"message": "CV caricato e analizzato", "candidate_id": candidate.id}
 
 
 @app.patch("/candidates/{candidate_id}/status")

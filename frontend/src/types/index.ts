@@ -6,6 +6,7 @@ export interface Candidate {
   skills: string[];
   status: string;
   created_at: string;
+  rejection_reason?: string;
 }
 
 export interface DashboardStats {

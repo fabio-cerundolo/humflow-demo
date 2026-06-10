@@ -203,6 +203,7 @@ export const useCandidates = (token: string | null) => {
     toggleSelectAll, toggleSelectOne, allSelected, someSelected,
     isDragging, setIsDragging, handleDrop, uploadingFiles, uploadFiles,
     candidatesPage, setCandidatesPage, filteredCandidates, paginatedCandidates, totalCandidatePages,
-    updateStatus
+    updateStatus,
+    api
   };
 };
