@@ -1,209 +1,196 @@
-import { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import axios, { AxiosInstance } from 'axios';
 import { Candidate, DashboardStats } from '../types';
 
-const API_BASE = "http://localhost:8000";
-const CANDIDATES_PER_PAGE = 10;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const useCandidates = (token: string | null) => {
-  // --- STATO ---
-  const [view, setView] = useState('stats');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  
-  // Filtri e Ricerca
-  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
-  
-  // Selezione multipla ed eliminazione
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<{ name: string; status: 'pending' | 'uploading' | 'success' | 'error' }[]>([]);
+
   const [selectedCandidates, setSelectedCandidates] = useState<Set<number>>(new Set());
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  
-  // Upload Drag & Drop
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadingFiles, setUploadingFiles] = useState<{ name: string; status: 'pending' | 'uploading' | 'success' | 'error' }[]>([]);
-  
-  // Paginazione
-  const [candidatesPage, setCandidatesPage] = useState(1);
 
-  // --- API INSTANCE ---
-  const api = useMemo(() => axios.create({
-    baseURL: API_BASE,
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  const [candidatesPage, setCandidatesPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const api: AxiosInstance = useMemo<AxiosInstance>(() => axios.create({
+    baseURL: API_URL,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   }), [token]);
 
-  // --- FETCH DATA ---
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!token) return;
     try {
-      const [candRes, statsRes] = await Promise.all([
+      setLoading(true);
+      const [candidatesRes, statsRes] = await Promise.all([
         api.get('/candidates'),
         api.get('/stats')
       ]);
-      setCandidates(candRes.data);
+      setCandidates(candidatesRes.data);
       setStats(statsRes.data);
-    } catch (err: any) {
-      if (err.response?.status === 401) {
-        localStorage.removeItem('flux_token');
-        window.location.reload(); // Forza il logout
-      }
+    } catch (error) {
+      console.error('Errore nel caricamento dei dati:', error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [api, token]);
 
-  // Auto-fetch e polling
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
-  }, [token, api]);
+    if (token) fetchData();
+  }, [token, fetchData]);
 
-  // Reset pagina quando cambia la ricerca
+  useEffect(() => {
+    if (!token) return;
+    const intervalId = setInterval(fetchData, 30000);
+    return () => clearInterval(intervalId);
+  }, [token, fetchData]);
+
+  const availableSkills = useMemo(() => {
+    return Array.from(new Set(candidates.flatMap(c => c.skills || []))).sort();
+  }, [candidates]);
+
+  // 🔥 CORREZIONE: Ora la ricerca controlla anche le skill
+  const filteredCandidates = useMemo(() => {
+    return candidates.filter(c => {
+      const lowerSearch = searchTerm.toLowerCase();
+
+      const matchesSearch =
+        c.name?.toLowerCase().includes(lowerSearch) ||
+        c.email.toLowerCase().includes(lowerSearch) ||
+        (c.skills && c.skills.some(skill => skill.toLowerCase().includes(lowerSearch))); // <-- AGGIUNTO
+
+      const matchesSkills =
+        selectedSkills.length === 0 ||
+        selectedSkills.every(skill => c.skills?.includes(skill));
+
+      return matchesSearch && matchesSkills;
+    });
+  }, [candidates, searchTerm, selectedSkills]);
+
+  const totalCandidatePages = Math.ceil(filteredCandidates.length / itemsPerPage);
+  const paginatedCandidates = filteredCandidates.slice(
+    (candidatesPage - 1) * itemsPerPage,
+    candidatesPage * itemsPerPage
+  );
+
   useEffect(() => {
     setCandidatesPage(1);
   }, [searchTerm, selectedSkills]);
-
-  // --- CRUD & AZIONI ---
-  const updateStatus = async (id: number, newStatus: string) => {
-    try {
-      await api.patch(`/candidates/${id}/status`, { status: newStatus });
-      fetchData();
-    } catch {
-      alert("Errore nell'aggiornamento dello stato.");
-    }
-  };
-
-  const deleteSingleCandidate = async (id: number) => {
-    await api.delete(`/candidates/${id}`);
-  };
-
-  const handleDeleteSelected = async () => {
-    setIsDeleting(true);
-    const ids = Array.from(selectedCandidates);
-    try {
-      await Promise.all(ids.map(id => deleteSingleCandidate(id)));
-      await fetchData();
-      setSelectedCandidates(new Set());
-      setShowDeleteModal(false);
-    } catch {
-      alert("Errore durante l'eliminazione di alcuni candidati.");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  // --- SELEZIONE MULTIPLA ---
-  const toggleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedCandidates(new Set(paginatedCandidates.map(c => c.id)));
-    } else {
-      setSelectedCandidates(new Set());
-    }
-  };
-
-  const toggleSelectOne = (id: number, checked: boolean) => {
-    const newSet = new Set(selectedCandidates);
-    if (checked) newSet.add(id);
-    else newSet.delete(id);
-    setSelectedCandidates(newSet);
-  };
-
-  // --- UPLOAD LOGIC ---
-  const uploadCV = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      await api.post('/upload-cv', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      return { success: true };
-    } catch {
-      return { success: false };
-    }
-  };
-
-  const uploadFiles = async (files: File[]) => {
-    const validFiles = files.filter(f => f.name.endsWith('.pdf') || f.name.endsWith('.docx'));
-    if (validFiles.length === 0) {
-      alert('Sono accettati solo file PDF o DOCX');
-      return;
-    }
-
-    const newUploads = validFiles.map(f => ({ name: f.name, status: 'pending' as const }));
-    setUploadingFiles(prev => [...prev, ...newUploads]);
-
-    for (const file of validFiles) {
-      setUploadingFiles(prev => prev.map(u => u.name === file.name ? { ...u, status: 'uploading' } : u));
-      const result = await uploadCV(file);
-      setUploadingFiles(prev => prev.map(u => u.name === file.name ? { ...u, status: result.success ? 'success' : 'error' } : u));
-    }
-    
-    await fetchData();
-    setTimeout(() => {
-      setUploadingFiles(prev => prev.filter(u => u.status !== 'success' && u.status !== 'error'));
-    }, 4000);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    await uploadFiles(Array.from(e.dataTransfer.files));
-  };
-
-  // --- FILTRI ---
-  const availableSkills = useMemo(() => {
-    const skillSet = new Set<string>();
-    candidates.forEach(c => c.skills?.forEach(skill => skillSet.add(skill)));
-    return Array.from(skillSet).sort();
-  }, [candidates]);
 
   const toggleSkill = (skill: string) => {
     setSelectedSkills(prev => prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]);
   };
 
   const resetFilters = () => {
-    setSearchTerm("");
+    setSearchTerm('');
     setSelectedSkills([]);
-    setSelectedCandidates(new Set());
-    setCandidatesPage(1);
   };
 
-  // --- DERIVATI (Paginazione e Filtri) ---
-  const filteredCandidates = useMemo(() => {
-    return candidates.filter(c => {
-      const matchesText = searchTerm === "" ||
-        (c.name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.skills?.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase()));
-      
-      if (!matchesText) return false;
-      if (selectedSkills.length === 0) return true;
-      return c.skills?.some(skill => selectedSkills.includes(skill));
-    });
-  }, [candidates, searchTerm, selectedSkills]);
+  const uploadFiles = async (files: File[]) => {
+    const newUploadingFiles = files.map(file => ({ name: file.name, status: 'pending' as const }));
+    setUploadingFiles(prev => [...prev, ...newUploadingFiles]);
 
-  const totalCandidatePages = Math.ceil(filteredCandidates.length / CANDIDATES_PER_PAGE);
-  
-  const paginatedCandidates = useMemo(() => {
-    return filteredCandidates.slice(
-      (candidatesPage - 1) * CANDIDATES_PER_PAGE,
-      candidatesPage * CANDIDATES_PER_PAGE
-    );
-  }, [filteredCandidates, candidatesPage]);
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        setUploadingFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'uploading' } : f));
+        await api.post('/upload-cv', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        setUploadingFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'success' } : f));
+      } catch (error) {
+        console.error(`Errore upload ${file.name}:`, error);
+        setUploadingFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error' } : f));
+      }
+    }
+    await fetchData();
+    setTimeout(() => setUploadingFiles([]), 3000);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await uploadFiles(Array.from(e.dataTransfer.files));
+      e.dataTransfer.clearData();
+    }
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedCandidates(checked ? new Set(paginatedCandidates.map(c => c.id)) : new Set());
+  };
+
+  const toggleSelectOne = (id: number, checked: boolean) => {
+    const newSet = new Set(selectedCandidates);
+    checked ? newSet.add(id) : newSet.delete(id);
+    setSelectedCandidates(newSet);
+  };
 
   const allSelected = paginatedCandidates.length > 0 && paginatedCandidates.every(c => selectedCandidates.has(c.id));
-  const someSelected = selectedCandidates.size > 0;
+  const someSelected = selectedCandidates.size > 0 && !allSelected;
+
+  const handleDeleteSelected = async () => {
+    if (selectedCandidates.size === 0) return;
+    setIsDeleting(true);
+    try {
+      await Promise.all(Array.from(selectedCandidates).map(id => api.delete(`/candidates/${id}`)));
+      setSelectedCandidates(new Set());
+      setShowDeleteModal(false);
+      await fetchData();
+    } catch (error) {
+      console.error('Errore eliminazione:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const deleteCandidate = async (id: number) => {
+    if (!window.confirm("Sei sicuro di voler eliminare questo candidato?")) return;
+    try {
+      await api.delete(`/candidates/${id}`);
+      await fetchData();
+    } catch (error) {
+      console.error("Errore eliminazione candidato:", error);
+    }
+  };
+
+  const deleteAllCandidates = async () => {
+    if (!window.confirm("⚠️ ATTENZIONE: Stai per eliminare TUTTI i candidati. Questa azione è IRREVERSIBILE. Continuare?")) return;
+    if (!window.confirm("🚨 CONFERMA FINALE: Sei assolutamente sicuro di voler eliminare TUTTI i candidati?")) return;
+    try {
+      await api.delete('/candidates/bulk-delete-all');
+      setSelectedCandidates(new Set());
+      await fetchData();
+    } catch (error) {
+      console.error("Errore eliminazione totale:", error);
+    }
+  };
+
+  const updateStatus = async (id: number, newStatus: string) => {
+    try {
+      await api.patch(`/candidates/${id}/status`, { status: newStatus });
+      setCandidates(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+      await fetchData();
+    } catch (error) {
+      console.error('Errore aggiornamento stato:', error);
+    }
+  };
 
   return {
-    view, setView,
-    candidates, stats, fetchData,
-    searchTerm, setSearchTerm,
-    selectedSkills, setSelectedSkills,
-    availableSkills, toggleSkill, resetFilters,
-    selectedCandidates, setSelectedCandidates,
-    showDeleteModal, setShowDeleteModal, isDeleting, handleDeleteSelected,
-    toggleSelectAll, toggleSelectOne, allSelected, someSelected,
+    candidates, stats, loading, fetchData, api,
+    searchTerm, setSearchTerm, selectedSkills, setSelectedSkills, availableSkills, toggleSkill, resetFilters,
     isDragging, setIsDragging, handleDrop, uploadingFiles, uploadFiles,
-    candidatesPage, setCandidatesPage, filteredCandidates, paginatedCandidates, totalCandidatePages,
-    updateStatus,
-    api
+    filteredCandidates, paginatedCandidates, totalCandidatePages, candidatesPage, setCandidatesPage,
+    selectedCandidates, setSelectedCandidates, toggleSelectAll, toggleSelectOne, allSelected, someSelected,
+    showDeleteModal, setShowDeleteModal, isDeleting, handleDeleteSelected, updateStatus,
+    deleteCandidate, deleteAllCandidates
   };
 };

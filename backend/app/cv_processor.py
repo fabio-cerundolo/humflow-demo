@@ -5,28 +5,32 @@ import io
 import pdfplumber
 import docx
 from sqlalchemy.orm import Session
-from .models import Candidate
+from .models import Candidate, Skill
 from .gdpr_sanitize import sanitize_cv
 
 UPLOAD_DIR = "/app/uploads/candidates"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # --- FUNZIONI DI SUPPORTO PER L'ESTRAZIONE ---
-
 def extract_email(text: str) -> str:
     match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
     return match.group(0) if match else None
 
 def extract_phone(text: str) -> str:
+    # Pattern 1: Formato italiano standard
     match = re.search(r'(\+?39\s?)?\d{3}[-\s]?\d{7,8}', text)
-    if not match:
-        match = re.search(r'(\+?\d{1,3}[\s\-]?)?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{4,}', text)
+    if match:
+        return match.group(0)
+    
+    # Pattern 2: Formato internazionale con parentesi
+    match = re.search(r'(\+?\d{1,3}[\s-]?)?(\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4,})', text)
     return match.group(0) if match else None
 
 def extract_name(text: str) -> str:
     """Cerca il nome nelle prime righe ignorando i titoli comuni"""
     noise = ["curriculum", "vitae", "europass", "profilo", "cv", "informazioni", "personali"]
     lines = [l.strip() for l in text.split('\n') if l.strip()]
+    
     for line in lines[:5]:
         if not any(n in line.lower() for n in noise):
             if re.match(r'^([A-Z][a-zà-ÿ]+\s+[A-Z][a-zà-ÿ]+)', line):
@@ -34,12 +38,12 @@ def extract_name(text: str) -> str:
     return None
 
 def extract_skills(text: str) -> list:
-    """Estrae le skill cercando parole chiave nel testo (Real-time tracking)"""
+    """Estrae le skill cercando parole chiave nel testo"""
     keywords = [
         # Linguaggi di programmazione
-        "Python", "Java", "JavaScript", "TypeScript", "C++", "C#", "Ruby", "PHP", "Swift", 
+        "Python", "Java", "JavaScript", "TypeScript", "C++", "C#", "Ruby", "PHP", "Swift",
         "Kotlin", "Go", "Rust", "R", "MATLAB", "SQL", "HTML", "CSS",
-
+        
         # Framework e librerie
         "React", "Angular", "Vue.js", "Node.js", "Express.js", "Django", "Flask", 
         "Spring Boot", "ASP.NET", "Laravel", "Symfony", "Ruby on Rails", 
@@ -77,32 +81,33 @@ def extract_skills(text: str) -> list:
         "Gestione Progetti", "Analisi Dati", "Reporting", "Visualizzazione Dati",
         "Ricerca e Sviluppo", "Innovazione", "UX Writing", "Content Strategy"
     ]
+    
     found_skills = []
     text_lower = text.lower()
+    
     for kw in keywords:
         if re.search(r'\b' + re.escape(kw.lower()) + r'\b', text_lower):
             found_skills.append(kw)
+    
     return list(set(found_skills))[:10]
 
-# --- FUNZIONE PRINCIPALE RICHIESTA ---
-
+# --- FUNZIONE PRINCIPALE ---
 def process_cv_file(contents: bytes, filename: str, db: Session, source_email=None):
     """
-    Processa un file CV: Estrazione testo -> Sanitizzazione -> Estrazione Dati -> 
+    Processa un file CV: Estrazione testo -> Sanitizzazione -> Estrazione Dati ->
     Salvataggio File -> Salvataggio Database.
     """
     text = ""
     ext = os.path.splitext(filename)[1].lower()
-
+    
     # 1. Estrazione del testo grezzo in base al formato
     try:
         if ext == '.pdf':
             with pdfplumber.open(io.BytesIO(contents)) as pdf:
-                # Estraiamo testo da tutte le pagine
-                text = "".join([page.extract_text() or "" for page in pdf.pages])
+                text = " ".join([page.extract_text() or " " for page in pdf.pages])
         elif ext == '.docx':
             doc = docx.Document(io.BytesIO(contents))
-            text = "".join([para.text + "\n" for para in doc.paragraphs])
+            text = " ".join([para.text + "\n" for para in doc.paragraphs])
         else:
             raise ValueError(f"Formato file {ext} non supportato")
     except Exception as e:
@@ -113,7 +118,7 @@ def process_cv_file(contents: bytes, filename: str, db: Session, source_email=No
     sanitized_text = sanitize_cv(text)
 
     # 3. Estrazione dati strutturati dal testo sanitizzato
-    name = extract_name(text) # Cerchiamo il nome sul testo originale per precisione
+    name = extract_name(text)
     email = extract_email(text) or source_email or "unknown@example.com"
     phone = extract_phone(text)
     skills = extract_skills(text)
@@ -134,16 +139,34 @@ def process_cv_file(contents: bytes, filename: str, db: Session, source_email=No
         name=name,
         email=email,
         phone=phone,
-        skills=skills, # Salvato come JSON
         status="new",
         cv_file_path=file_path
     )
+
+    # Trova o crea i record delle skill nel database
+    skill_objects = []
+    for s_name in skills:
+        s_name_clean = s_name.strip()
+        if not s_name_clean:
+            continue
+        
+        # Cerca la skill
+        skill_obj = db.query(Skill).filter(Skill.name == s_name_clean).first()
+        if not skill_obj:
+            skill_obj = Skill(name=s_name_clean)
+            db.add(skill_obj)
+            db.commit()
+            db.refresh(skill_obj)
+        skill_objects.append(skill_obj)
     
+    # ✅ CORRETTO: la relazione si chiama 'skills', non 'skills_rel'
+    candidate.skills = skill_objects
+
     try:
         db.add(candidate)
         db.commit()
         db.refresh(candidate)
-        print(f"✅ Candidato salvato: {name} ({email})")
+        print(f"✅ Candidato salvato: {name} ({email}) con {len(skill_objects)} skill")
     except Exception as e:
         db.rollback()
         print(f"❌ ERRORE DATABASE: {e}")

@@ -7,33 +7,17 @@ import DeleteCandidateModal from '../components/modals/DeleteCandidateModal';
 import { Candidate } from '../types';
 
 interface CandidatesViewProps {
-  searchTerm: string;
-  setSearchTerm: (v: string) => void;
-  selectedSkills: string[];
-  toggleSkill: (s: string) => void;
-  resetFilters: () => void;
-  availableSkills: string[];
-  isDragging: boolean;
-  setIsDragging: (v: boolean) => void;
-  handleDrop: (e: React.DragEvent) => void;
-  uploadFiles: (files: File[]) => void;
-  uploadingFiles: { name: string; status: 'pending' | 'uploading' | 'success' | 'error' }[];
-  filteredCandidates: Candidate[];
-  paginatedCandidates: Candidate[];
-  totalCandidatePages: number;
-  candidatesPage: number;
-  setCandidatesPage: (v: number) => void;
-  allSelected: boolean;
-  someSelected: boolean;
-  selectedCandidates: Set<number>;
-  setSelectedCandidates: (v: Set<number>) => void;
-  toggleSelectAll: (v: boolean) => void;
-  toggleSelectOne: (id: number, v: boolean) => void;
-  showDeleteModal: boolean;
-  setShowDeleteModal: (v: boolean) => void;
-  isDeleting: boolean;
-  handleDeleteSelected: () => void;
+  searchTerm: string; setSearchTerm: (v: string) => void;
+  selectedSkills: string[]; toggleSkill: (s: string) => void; resetFilters: () => void; availableSkills: string[];
+  isDragging: boolean; setIsDragging: (v: boolean) => void; handleDrop: (e: React.DragEvent) => void;
+  uploadFiles: (files: File[]) => void; uploadingFiles: { name: string; status: 'pending' | 'uploading' | 'success' | 'error' }[];
+  filteredCandidates: Candidate[]; paginatedCandidates: Candidate[]; totalCandidatePages: number; candidatesPage: number; setCandidatesPage: (v: number) => void;
+  allSelected: boolean; someSelected: boolean; selectedCandidates: Set<number>; setSelectedCandidates: (v: Set<number>) => void;
+  toggleSelectAll: (v: boolean) => void; toggleSelectOne: (id: number, v: boolean) => void;
+  showDeleteModal: boolean; setShowDeleteModal: (v: boolean) => void; isDeleting: boolean; handleDeleteSelected: () => void;
   updateStatus: (id: number, status: string) => void;
+  deleteCandidate: (id: number) => Promise<void>;
+  deleteAllCandidates: () => Promise<void>;
   api: any;
 }
 
@@ -42,13 +26,13 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
   isDragging, setIsDragging, handleDrop, uploadFiles, uploadingFiles,
   filteredCandidates, paginatedCandidates, totalCandidatePages, candidatesPage, setCandidatesPage,
   allSelected, someSelected, selectedCandidates, setSelectedCandidates, toggleSelectAll, toggleSelectOne,
-  showDeleteModal, setShowDeleteModal, isDeleting, handleDeleteSelected, updateStatus, api
+  showDeleteModal, setShowDeleteModal, isDeleting, handleDeleteSelected, updateStatus,
+  deleteCandidate, deleteAllCandidates, api
 }) => {
-  
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       await uploadFiles(Array.from(e.target.files));
-      e.target.value = ''; 
+      e.target.value = '';
     }
   };
 
@@ -81,7 +65,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                 />
               </div>
             </div>
-
             {availableSkills.length > 0 && (
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Competenze</label>
@@ -90,11 +73,10 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                     <button
                       key={skill}
                       onClick={() => toggleSkill(skill)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-1.5 ${
-                        selectedSkills.includes(skill)
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-1.5 ${selectedSkills.includes(skill)
                           ? 'bg-indigo-600 text-white shadow-sm'
                           : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
+                        }`}
                       aria-pressed={selectedSkills.includes(skill)}
                     >
                       {skill}
@@ -105,12 +87,11 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
               </div>
             )}
           </div>
-
           {(searchTerm || selectedSkills.length > 0) && (
             <div className="pt-4 mt-5 border-t border-gray-100 dark:border-gray-700">
-              <Button 
-                variant="outline" 
-                onClick={resetFilters} 
+              <Button
+                variant="outline"
+                onClick={resetFilters}
                 className="w-full text-xs py-2.5 justify-center font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-600"
               >
                 Resetta filtri
@@ -124,11 +105,10 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
             onDrop={handleDrop}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
-            className={`border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer ${
-              isDragging 
-                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+            className={`border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer ${isDragging
+                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                 : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-500 bg-gray-50 dark:bg-gray-800/50'
-            }`}
+              }`}
             role="region"
             aria-label="Area di upload drag and drop"
           >
@@ -178,12 +158,31 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
       </aside>
 
       <div className="flex-1 min-w-0 w-full">
-        {someSelected && (
-          <div className="mb-4 flex items-center justify-between p-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 animate-in fade-in slide-in-from-top-2">
-            <span className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">{selectedCandidates.size} selezionati</span>
-            <Button variant="secondary" onClick={() => setShowDeleteModal(true)} className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 border-red-200 dark:border-red-800 text-xs py-2">
-              <Trash2 size={14} className="mr-2" /> Elimina selezionati
-            </Button>
+        {filteredCandidates.length > 0 && (
+          <div className="mb-4 flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+            <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+              {selectedCandidates.size > 0 ? `${selectedCandidates.size} selezionati` : `${filteredCandidates.length} candidati totali`}
+            </span>
+            <div className="flex gap-2">
+              {someSelected && (
+                <Button variant="secondary" onClick={() => setShowDeleteModal(true)} className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 border-red-200 dark:border-red-800 text-xs py-2">
+                  <Trash2 size={14} className="mr-2" /> Elimina selezionati
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  if (window.confirm('⚠️ ATTENZIONE: Stai per eliminare TUTTI i candidati. Questa azione è IRREVERSIBILE. Continuare?')) {
+                    if (window.confirm('🚨 CONFERMA FINALE: Sei assolutamente sicuro di voler eliminare TUTTI i candidati?')) {
+                      await deleteAllCandidates();
+                    }
+                  }
+                }}
+                className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 border-red-200 dark:border-red-800 text-xs py-2"
+              >
+                <Trash2 size={14} className="mr-2" /> Elimina TUTTI
+              </Button>
+            </div>
           </div>
         )}
 
@@ -251,7 +250,6 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                        {/* LOGICA DOWNLOAD REALE */}
                         <button
                           onClick={async () => {
                             try {
@@ -264,8 +262,8 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                               a.click();
                               a.remove();
                               URL.revokeObjectURL(url);
-                            } catch { 
-                              alert('Errore nel download del CV.'); 
+                            } catch {
+                              alert('Errore nel download del CV.');
                             }
                           }}
                           className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -273,13 +271,8 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                         >
                           <Download size={16} />
                         </button>
-                        
-                        {/* LOGICA ELIMINAZIONE REALE */}
                         <button
-                          onClick={() => {
-                            setSelectedCandidates(new Set([c.id]));
-                            setShowDeleteModal(true);
-                          }}
+                          onClick={() => deleteCandidate(c.id)}
                           className="p-2 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
                           title="Elimina (GDPR)"
                         >
@@ -293,7 +286,7 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
                     <td className="p-4">
                       {c.status === 'rejected' && c.rejection_reason ? (
                         <span className="text-[10px] text-red-500 dark:text-red-400 flex items-start gap-1 font-medium">
-                          <AlertCircle size={12} className="mt-0.5 shrink-0" /> 
+                          <AlertCircle size={12} className="mt-0.5 shrink-0" />
                           {c.rejection_reason}
                         </span>
                       ) : (
@@ -328,7 +321,7 @@ export const CandidatesView: React.FC<CandidatesViewProps> = ({
         </Card>
       </div>
 
-      <DeleteCandidateModal 
+      <DeleteCandidateModal
         isOpen={showDeleteModal}
         count={selectedCandidates.size}
         onClose={() => setShowDeleteModal(false)}

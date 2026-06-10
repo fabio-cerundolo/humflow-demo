@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import MainLayout from './layout/MainLayout';
-
-// Hooks
 import { useAuth } from './hooks/useAuth';
 import { useCandidates } from './hooks/useCandidates';
 import { useInterviews } from './hooks/useInterviews';
 import { useSkillGap } from './hooks/useSkillGap';
-
-// Views
 import { DashboardView } from './views/DashboardView';
 import { CandidatesView } from './views/CandidatesView';
 import { PipelineView } from './views/PipelineView';
@@ -17,13 +13,14 @@ import { CalendarView } from './views/CalendarView';
 import { GdprView } from './views/GdprView';
 
 const App: React.FC = () => {
-  // 1. Tema
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
     }
     return false;
   });
+
+  const [view, setView] = useState('stats');
 
   useEffect(() => {
     if (isDarkMode) {
@@ -35,16 +32,12 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // 2. Inizializzazione Hooks
   const { token, loginData, setLoginData, loginError, handleLogin, handleLogout } = useAuth();
-  
   const candidatesLogic = useCandidates(token);
-  const { view, setView, candidates, stats, /* ... destruttura il resto ... */ } = candidatesLogic;
-  
+  const { candidates, stats } = candidatesLogic;
   const interviewsLogic = useInterviews(candidates);
   const skillGapLogic = useSkillGap();
 
-  // 3. Render Login
   if (!token) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
@@ -64,17 +57,16 @@ const App: React.FC = () => {
     );
   }
 
-  // 4. Render Applicazione (Orchestratore)
   return (
-    <MainLayout 
-      currentView={view} 
-      onViewChange={setView} 
-      onLogout={handleLogout} 
-      isDarkMode={isDarkMode} 
+    <MainLayout
+      currentView={view}
+      onViewChange={setView}
+      onLogout={handleLogout}
+      isDarkMode={isDarkMode}
       toggleDarkMode={() => setIsDarkMode(!isDarkMode)}
     >
       {view === 'stats' && <DashboardView stats={stats} />}
-      {view === 'candidates' && <CandidatesView  {...candidatesLogic} />}
+      {view === 'candidates' && <CandidatesView {...candidatesLogic} />}
       {view === 'pipeline' && <PipelineView candidates={candidates} updateStatus={candidatesLogic.updateStatus} />}
       {view === 'skillgap' && <SkillGapView candidates={candidates} {...skillGapLogic} />}
       {view === 'reports' && <ReportsView candidates={candidates} />}

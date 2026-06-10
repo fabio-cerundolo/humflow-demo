@@ -1,8 +1,8 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Users, PieChart as PieChartIcon } from 'lucide-react';
+import { Users, TrendingUp, AlertCircle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import { DashboardStats } from '../types';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface DashboardViewProps {
   stats: DashboardStats | null;
@@ -21,79 +21,49 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ stats }) => {
 
   return (
     <div className="space-y-6">
-      {/* Riga Superiore: Metriche */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card title="Totale Candidati" className="flex flex-col justify-center">
+        <Card>
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl">
-              <Users className="text-indigo-600 dark:text-indigo-400" size={24} />
+            <div className="p-3 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+              <Users size={24} />
             </div>
             <div>
-              <div className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total_candidates}</div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Talenti nel database</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Totale Candidati</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total_candidates}</p>
             </div>
           </div>
         </Card>
-
-        <Card title="Distribuzione Skill (Top 5)">
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.skills_bar.slice(0, 5)}>
-                <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tick={{ fill: '#9ca3af' }} />
-                <YAxis stroke="#9ca3af" fontSize={12} tick={{ fill: '#9ca3af' }} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', color: '#111827' }}
-                  itemStyle={{ color: '#111827' }}
-                  cursor={{ fill: '#f3f4f6' }}
-                />
-                <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <Card>
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+              <TrendingUp size={24} />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Skill Uniche</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.skills_bar.length}</p>
+            </div>
           </div>
         </Card>
-
-        <Card title="Stato Candidati">
-          <div className="h-48 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={stats.status_pie}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={40}
-                  outerRadius={60}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  labelLine={false}
-                >
-                  {stats.status_pie.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', color: '#111827' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+        <Card>
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Scartati</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.status_distribution.rejected || 0}</p>
+            </div>
           </div>
         </Card>
       </div>
 
-      {/* Riga Inferiore: Trend */}
-      <Card title="Trend Assunzioni">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Andamento settimanale delle skill richieste</p>
-          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">
-            <TrendingUp size={16} />
-            <span className="text-sm font-medium">+32% vs mese scorso</span>
-          </div>
-        </div>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card title="Top Skill Richieste">
+          <ResponsiveContainer width="100%" height={300}>
             <BarChart data={stats.skills_bar}>
               <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tick={{ fill: '#9ca3af' }} />
               <YAxis stroke="#9ca3af" fontSize={12} tick={{ fill: '#9ca3af' }} />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', color: '#111827' }}
                 itemStyle={{ color: '#111827' }}
                 cursor={{ fill: '#f3f4f6' }}
@@ -101,8 +71,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ stats }) => {
               <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </Card>
+        </Card>
+        <Card title="Distribuzione Stati">
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie data={stats.status_pie} cx="50%" cy="50%" outerRadius={100} fill="#8884d8" dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                {stats.status_pie.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
     </div>
   );
 };

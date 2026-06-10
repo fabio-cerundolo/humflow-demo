@@ -1,9 +1,5 @@
 """
 worker.py — Celery worker per FluxHR.
-Contiene:
-- ingest_emails_task: polling mailhog ogni 30s per i CV in arrivo via email
-- send_art14_email_task: invio email GDPR Art.14 al candidato
-- delete_old_candidates: pulizia automatica (retention 6 mesi) alle 02:00 UTC
 """
 import os
 import base64
@@ -15,7 +11,7 @@ from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from .database import SessionLocal
-from .models import Candidate
+from .models import Candidate, Skill
 from .cv_processor import process_cv_file
 from .templates.gdpr_email import get_art14_html
 
@@ -34,12 +30,10 @@ celery_app.conf.beat_schedule = {
 }
 celery_app.conf.timezone = "UTC"
 
-
 @celery_app.task(name="app.worker.ingest_emails_task")
 def ingest_emails_task():
-    """Polling MailHog con paginazione, error handling per singolo messaggio e decoding robusto."""
     try:
-        limit = 100   # quanti messaggi per pagina
+        limit = 100
         start = 0
         processed = 0
         
@@ -53,18 +47,15 @@ def ingest_emails_task():
             data = response.json()
             messages = data.get("items", [])
             if not messages:
-                break   # nessun altro messaggio
+                break
 
             for msg in messages:
-                # Estrai l'ID del messaggio (MailHog usa "ID" in maiuscolo nella v2)
                 msg_id = msg.get("ID")
                 if not msg_id:
                     continue
 
-                # Crea una sessione DB fresca per ogni CV
                 db = SessionLocal()
                 try:
-                    # Cerca allegati
                     mime = msg.get("MIME", {})
                     parts = mime.get("Parts", [])
                     found = False
@@ -75,7 +66,6 @@ def ingest_emails_task():
                         if "filename=" in content_disposition:
                             filename = content_disposition.split("filename=")[1].strip('"')
                             if filename.endswith((".pdf", ".docx")):
-                                # Decodifica robusta del body
                                 body = part.get("Body", "")
                                 transfer_encoding = headers.get("Content-Transfer-Encoding", [""])[0].lower()
                                 file_bytes = None
@@ -87,45 +77,43 @@ def ingest_emails_task():
                                         print(f"Errore decodifica base64 per {filename}: {e}")
                                         continue
                                 else:
-                                    # Assume plain text (ma per file binari non funziona, meglio tentare base64 comunque)
                                     try:
                                         file_bytes = base64.b64decode(body)
                                     except:
                                         file_bytes = body.encode()
 
                                 if file_bytes:
-                                    # 1. Processa il CV (crea/aggiorna il candidato nel DB)
+                                    # 1. Processa il CV
                                     candidate = process_cv_file(file_bytes, filename, db)
                                     
-                                    # ==========================================
-                                    # 2. LOGICA DI SCREMATURA AUTOMATICA SKILL GAP
-                                    # ==========================================
+                                    # 2. LOGICA DI SCREMATURA AUTOMATICA (3 LIVELLI)
                                     REQUIRED_SKILLS = ["python", "react", "typescript", "aws", "leadership"]
-                                    MIN_MATCH_THRESHOLD = 0.3  # Scarta se corrisponde a meno del 30%
                                     
-                                    cand_skills = candidate.skills if isinstance(candidate.skills, list) else []
-                                    extracted_lower = [skill.lower().strip() for skill in cand_skills]
+                                    # ✅ CORRETTO: candidate.skills è una lista di oggetti Skill, quindi usiamo .name
+                                    candidate_skill_names = [skill.name.lower() for skill in candidate.skills]
+                                    required_lower = [skill.lower() for skill in REQUIRED_SKILLS]
+                                     
+                                    matches = [skill for skill in required_lower if skill in candidate_skill_names]
+                                    match_percentage = len(matches) / len(required_lower) if required_lower else 0
                                     
-                                    matches = [skill for skill in REQUIRED_SKILLS if skill in extracted_lower]
-                                    match_percentage = len(matches) / len(REQUIRED_SKILLS) if REQUIRED_SKILLS else 0
-                                    
-                                    if match_percentage < MIN_MATCH_THRESHOLD:
+                                    if match_percentage < 0.3:
                                         candidate.status = "rejected"
                                         candidate.rejection_reason = f"Scartato auto: match Skill Gap troppo basso ({int(match_percentage * 100)}%)"
+                                    elif match_percentage < 0.7:
+                                        candidate.status = "reviewed"
+                                        candidate.rejection_reason = f"Revisionato auto: match parziale ({int(match_percentage * 100)}%). Richiede verifica."
                                     else:
                                         candidate.status = "new"
-                                        candidate.rejection_reason = None
+                                        candidate.rejection_reason = f"Alta corrispondenza skill rilevata ({int(match_percentage * 100)}%)"
                                         
-                                    db.commit() # Salva lo stato e il motivo nel database
-                                    # ==========================================
+                                    db.commit() # Salva stato e motivo
                                     
-                                    # 3. Invia email GDPR in background
+                                    # 3. Invia email GDPR
                                     send_art14_email_task.delay(candidate.email, candidate.name or "Candidato")
                                     found = True
-                                    break   # esci dai parts, abbiamo già preso l'allegato
+                                    break
 
                     if found:
-                        # Elimina il messaggio solo se processato con successo
                         requests.delete(f"http://mailhog:8025/api/v1/messages/{msg_id}")
                         processed += 1
                     else:
@@ -133,11 +121,9 @@ def ingest_emails_task():
 
                 except Exception as e:
                     print(f"ERRORE processando messaggio {msg_id}: {e}")
-                    # Non cancellare il messaggio in caso di errore, verrà ripreso al prossimo polling
                 finally:
                     db.close()
 
-            # Passa alla pagina successiva se il numero di messaggi è uguale al limite
             if len(messages) < limit:
                 break
             start += limit
@@ -147,10 +133,8 @@ def ingest_emails_task():
     except Exception as e:
         print(f"Errore grave in ingest_emails_task: {e}")
 
-
 @celery_app.task(name="app.worker.send_art14_email_task")
 def send_art14_email_task(email_dest: str, name: str = "Candidato"):
-    """Invia email HTML Art.14 GDPR al candidato."""
     SMTP_SERVER = os.getenv("SMTP_SERVER", "mailhog")
     SMTP_PORT = int(os.getenv("SMTP_PORT", 1025))
     SMTP_USER = os.getenv("SMTP_USER", "")
@@ -178,10 +162,8 @@ def send_art14_email_task(email_dest: str, name: str = "Candidato"):
         print(f"[Celery] ERRORE invio email: {e}")
         return False
 
-
 @celery_app.task(name="app.worker.delete_old_candidates")
 def delete_old_candidates():
-    """Retention GDPR: elimina candidati inseriti più di 6 mesi fa."""
     db = SessionLocal()
     try:
         six_months_ago = datetime.utcnow() - timedelta(days=180)

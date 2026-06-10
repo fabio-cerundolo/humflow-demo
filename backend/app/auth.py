@@ -32,7 +32,7 @@ class UserInDB(BaseModel):
 fake_users_db = {
     "admin": {
         "username": "admin",
-        "hashed_password": "$2b$12$vIdvvdxzboXBq79FdmBbd.lRF8e3gMpq8OpqbWPnqWjIxqEwq1XgC",
+        "hashed_password": "$2b$12$pHn27a4AM0YmRTIHee0kk.FLD2B6sCg2dwIc5mMrALgFzPhFC.b8C",
     }
 }
 

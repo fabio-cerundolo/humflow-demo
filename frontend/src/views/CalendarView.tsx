@@ -120,7 +120,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         )}
       </Card>
 
-      {/* Modali Integrati */}
       <NewInterviewModal
         isOpen={showNewInterviewModal}
         onClose={() => setShowNewInterviewModal(false)}
