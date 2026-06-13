@@ -104,7 +104,7 @@ export const useCandidates = (token: string | null) => {
       formData.append('file', file);
       try {
         setUploadingFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'uploading' } : f));
-        await api.post('/upload-cv', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.post('/upload-cv', formData);
         setUploadingFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'success' } : f));
       } catch (error) {
         console.error(`Errore upload ${file.name}:`, error);

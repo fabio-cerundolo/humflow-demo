@@ -302,9 +302,7 @@ const App: React.FC = () => {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      await api.post('/upload-cv', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await api.post('/upload-cv', formData);
       return { success: true };
     } catch (err) {
       console.error(`Errore upload ${file.name}:`, err);
