@@ -25,3 +25,4 @@ backend/uploads/debug/
 # OS
 .DS_Store
 Thumbs.db
+celerybeat-schedule

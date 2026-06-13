@@ -134,14 +134,21 @@ def process_cv_file(contents: bytes, filename: str, db: Session, source_email=No
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    # 5. Creazione record nel Database tramite SQLAlchemy
-    candidate = Candidate(
-        name=name,
-        email=email,
-        phone=phone,
-        status="new",
-        cv_file_path=file_path
-    )
+    # 5. Creazione record nel Database tramite SQLAlchemy (upsert)
+    candidate = db.query(Candidate).filter(Candidate.email == email).first()
+    if candidate:
+        candidate.name = name
+        candidate.phone = phone
+        candidate.cv_file_path = file_path
+        candidate.status = "new"
+    else:
+        candidate = Candidate(
+            name=name,
+            email=email,
+            phone=phone,
+            status="new",
+            cv_file_path=file_path
+        )
 
     # Trova o crea i record delle skill nel database
     skill_objects = []
