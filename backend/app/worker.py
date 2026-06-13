@@ -1,11 +1,13 @@
 """
-worker.py — Celery worker per FluxHR.
+worker.py — Celery worker per humflow.
 """
 import os
 import base64
 import smtplib
 import requests
+# pyrefly: ignore [missing-import]
 from celery import Celery
+# pyrefly: ignore [missing-import]
 from celery.schedules import crontab
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
@@ -16,7 +18,7 @@ from .cv_processor import process_cv_file
 from .templates.gdpr_email import get_art14_html
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-celery_app = Celery("fluxhr", broker=REDIS_URL, backend=REDIS_URL)
+celery_app = Celery("humflow", broker=REDIS_URL, backend=REDIS_URL)
 
 celery_app.conf.beat_schedule = {
     "ingest-every-30s": {
@@ -139,11 +141,11 @@ def send_art14_email_task(email_dest: str, name: str = "Candidato"):
     SMTP_PORT = int(os.getenv("SMTP_PORT", 1025))
     SMTP_USER = os.getenv("SMTP_USER", "")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-    FROM_EMAIL = os.getenv("FROM_EMAIL", "privacy@fluxhr.com")
+    FROM_EMAIL = os.getenv("FROM_EMAIL", "privacy@humflow.com")
     
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "📌 Conferma Ricezione CV - FluxHR"
-    msg["From"] = f"FluxHR Privacy <{FROM_EMAIL}>"
+    msg["Subject"] = "📌 Conferma Ricezione CV - humflow"
+    msg["From"] = f"humflow Privacy <{FROM_EMAIL}>"
     msg["To"] = email_dest
 
     html_content = get_art14_html(name)

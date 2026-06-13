@@ -7,7 +7,7 @@ from email.message import EmailMessage
 SMTP_SERVER = "localhost"
 SMTP_PORT = 1025  # Mailhog
 TARGET_EMAIL = "jobs@fluxhr.local"
-SOURCE_FOLDER = "./campioni_cv"  # Cartella dove metti i tuoi file reali
+SOURCE_FOLDER = "./campioni_cv"  # Cartella dove metti i tuoi file reali (PATH INVARIA TO)
 
 # Lista di email fittizie per simulare candidati diversi
 ALIASES = [
@@ -21,7 +21,7 @@ ALIASES = [
 def send_cv_from_file(file_path, sender_email):
     file_name = os.path.basename(file_path)
     print(f"📦 Elaborazione file: {file_name}...")
-
+    
     # 1. Creazione del messaggio
     msg = EmailMessage()
     msg['Subject'] = f"Candidatura per posizione aperta - {file_name}"
@@ -44,21 +44,27 @@ def send_cv_from_file(file_path, sender_email):
             filename=file_name
         )
 
-    # 3. Invio a Mailhog
+    # 3. Invio a Mailhog ed ELIMINAZIONE in caso di successo
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.send_message(msg)
         print(f"✅ Inviato con successo da: {sender_email}")
+        
+        # AUTO-ELIMINAZIONE DEL FILE DOPO INVIO RIUSCITO
+        os.remove(file_path)
+        print(f"🗑️  Eliminato automaticamente: {file_name}")
+        
     except Exception as e:
         print(f"❌ Errore durante l'invio di {file_name}: {e}")
+        print("⚠️  Il file NON è stato eliminato a causa dell'errore.")
 
 def run():
     if not os.path.exists(SOURCE_FOLDER):
         print(f"❌ Errore: La cartella '{SOURCE_FOLDER}' non esiste. Creala e inserisci i PDF.")
         return
-
+        
     files = [f for f in os.listdir(SOURCE_FOLDER) if f.endswith(('.pdf', '.docx'))]
-    
+
     if not files:
         print(f"⚠️  Nessun file PDF o DOCX trovato in '{SOURCE_FOLDER}'.")
         return
@@ -69,7 +75,6 @@ def run():
         path = os.path.join(SOURCE_FOLDER, file_name)
         # Sceglie un alias a rotazione o ne crea uno basato sul nome file
         sender = ALIASES[i % len(ALIASES)]
-        
         send_cv_from_file(path, sender)
 
     print("\n🏁 Simulazione completata!")

@@ -163,14 +163,12 @@ export const useCandidates = (token: string | null) => {
   };
 
   const deleteAllCandidates = async () => {
-    if (!window.confirm("⚠️ ATTENZIONE: Stai per eliminare TUTTI i candidati. Questa azione è IRREVERSIBILE. Continuare?")) return;
-    if (!window.confirm("🚨 CONFERMA FINALE: Sei assolutamente sicuro di voler eliminare TUTTI i candidati?")) return;
     try {
-      await api.delete('/candidates/bulk-delete-all');
-      setSelectedCandidates(new Set());
-      await fetchData();
+      // Usa POST perché abbiamo cambiato l'endpoint da DELETE a POST per evitare errori CORS
+      await api.post('/candidates/bulk-delete-all');
+      await fetchData(); // Ricarica i dati dopo l'eliminazione
     } catch (error) {
-      console.error("Errore eliminazione totale:", error);
+      console.error('Errore eliminazione totale:', error);
     }
   };
 

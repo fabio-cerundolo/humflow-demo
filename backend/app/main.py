@@ -1,18 +1,16 @@
-# backend/app/main.py
 import os
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 import jwt
 import bcrypt
-from datetime import datetime, timedelta
 
 from .database import SessionLocal, engine
 from .models import Base, Candidate, Skill, candidate_skills, User
@@ -75,6 +73,10 @@ class StatsResponse(BaseModel):
     skills_bar: List[Dict[str, Any]]
     status_pie: List[Dict[str, Any]]
     status_distribution: Dict[str, int]
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -171,24 +173,58 @@ def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):
     
     return {"message": "Candidato eliminato con successo"}
 
-@app.post("/candidates/bulk-delete")
-def bulk_delete_candidates(candidate_ids: List[int], db: Session = Depends(get_db)):
-    """Elimina più candidati contemporaneamente."""
-    deleted_count = 0
-    
-    for candidate_id in candidate_ids:
-        candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-        if candidate:
-            # Elimina le associazioni
-            db.execute(
-                candidate_skills.delete().where(candidate_skills.c.candidate_id == candidate_id)
-            )
-            db.delete(candidate)
-            deleted_count += 1
-    
-    db.commit()
-    
-    return {"message": f"{deleted_count} candidati eliminati con successo"}
+# CAMBIA DA @app.delete A @app.post
+@app.post("/candidates/bulk-delete-all")
+def delete_all_candidates(db: Session = Depends(get_db)):
+    """
+    Elimina TUTTI i candidati dal database.
+    Operazione irreversibile - usare con cautela.
+    """
+    try:
+        # Elimina prima le associazioni nella tabella di giunzione
+        db.execute(candidate_skills.delete())
+        
+        # Elimina tutti i candidati
+        deleted_count = db.query(Candidate).delete()
+        
+        db.commit()
+        
+        return {
+            "message": "Tutti i candidati sono stati eliminati con successo",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore durante l'eliminazione di tutti i candidati: {str(e)}"
+        )
+
+@app.delete("/candidates/bulk-delete-all")
+def delete_all_candidates(db: Session = Depends(get_db)):
+    """
+    Elimina TUTTI i candidati dal database.
+    Operazione irreversibile - usare con cautela.
+    """
+    try:
+        # Elimina prima le associazioni nella tabella di giunzione
+        db.execute(candidate_skills.delete())
+        
+        # Elimina tutti i candidati
+        deleted_count = db.query(Candidate).delete()
+        
+        db.commit()
+        
+        return {
+            "message": "Tutti i candidati sono stati eliminati con successo",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Errore durante l'eliminazione di tutti i candidati: {str(e)}"
+        )
 
 # ==========================================
 # ENDPOINT: UPLOAD CV
@@ -213,8 +249,7 @@ async def upload_cv(
         # Leggi il contenuto del file
         file_bytes = await file.read()
         
-        # Processa il CV (questa funzione deve essere implementata in cv_processor.py)
-        # Dovrebbe estrarre nome, email, telefono, skill e salvare il candidato nel DB
+        # Processa il CV
         candidate = process_cv_file(file_bytes, file.filename, db)
         
         # ==========================================
@@ -276,7 +311,7 @@ def download_cv(candidate_id: int, db: Session = Depends(get_db)):
             detail=f"File non trovato sul server: {candidate.cv_file_path}"
         )
     
-    # Estrai il nome originale del file (es. "mario_rossi.pdf")
+    # Estrai il nome originale del file
     filename = os.path.basename(candidate.cv_file_path)
     
     # Determina il media type in base all'estensione
@@ -310,7 +345,6 @@ def get_stats(db: Session = Depends(get_db)):
     total_candidates = db.query(Candidate).count()
     
     # Distribuzione skill (top 10)
-    # Usa una query per contare quante volte ogni skill appare
     skills_count = (
         db.query(Skill.name, func.count(candidate_skills.c.skill_id).label('count'))
         .join(candidate_skills, Skill.id == candidate_skills.c.skill_id)
@@ -331,7 +365,7 @@ def get_stats(db: Session = Depends(get_db)):
     
     status_distribution = {status: count for status, count in status_counts}
     
-    # Per il grafico a torta (stesso formato)
+    # Per il grafico a torta
     status_pie = [{"name": status, "value": count} for status, count in status_counts]
     
     return {
@@ -369,16 +403,13 @@ def root():
         "docs": "/docs",
         "health": "/health"
     }
+
 # ==========================================
 # CONFIGURAZIONE AUTENTICAZIONE (JWT)
 # ==========================================
 SECRET_KEY = "humflow_super_secret_key_cambiami_in_produzione"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440 # 24 ore
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 ore
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -399,39 +430,12 @@ def login_for_access_token(login_data: LoginRequest, db: Session = Depends(get_d
     user = db.query(User).filter(User.username == login_data.username).first()
     if not user:
         raise HTTPException(status_code=401, detail="Credenziali non valide")
-        
+    
     # 2. Verifica la password usando bcrypt
     if not bcrypt.checkpw(login_data.password.encode('utf-8'), user.password.encode('utf-8')):
         raise HTTPException(status_code=401, detail="Credenziali non valide")
-        
+    
     # 3. Genera il token JWT
     access_token = create_access_token(data={"sub": user.username})
     
-    # Il frontend (useAuth.ts) si aspetta esattamente questo formato
     return {"access_token": access_token, "token_type": "bearer"}
-
-@app.delete("/candidates/bulk-delete-all")
-def delete_all_candidates(db: Session = Depends(get_db)):
-    """
-    Elimina TUTTI i candidati dal database.
-    Operazione irreversibile - usare con cautela.
-    """
-    try:
-        # Elimina prima le associazioni nella tabella di giunzione
-        db.execute(candidate_skills.delete())
-        
-        # Elimina tutti i candidati
-        deleted_count = db.query(Candidate).delete()
-        
-        db.commit()
-        
-        return {
-            "message": f"Tutti i candidati sono stati eliminati con successo",
-            "deleted_count": deleted_count
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Errore durante l'eliminazione di tutti i candidati: {str(e)}"
-        )
