@@ -42,8 +42,7 @@ celery_app = Celery(
     "humflow",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    # Auto‑discover tasks in this package (you can adjust the path)
-    include=["app.worker.worker"],   # <- this file itself contains the tasks
+    include=["app.worker"],   # was "app.worker.worker"
 )
 
 # Optional Celery tuning (feel free to adapt)
@@ -60,15 +59,15 @@ celery_app.conf.update(
 # ------------------------------------------------------------------
 celery_app.conf.beat_schedule = {
     "ingest-every-30s": {
-        "task": "app.worker.worker.ingest_emails_task",
+        "task": "app.worker.ingest_emails_task",       # was "app.worker.worker.ingest_emails_task"
         "schedule": 30.0,
     },
     "delete-old-candidates": {
-        "task": "app.worker.worker.delete_old_candidates",
+        "task": "app.worker.delete_old_candidates",     # was "app.worker.worker.delete_old_candidates"
         "schedule": crontab(hour=2, minute=0),
     },
 }
-celery_app.conf.timezone = "UTC"
+#celery_app.conf.timezone = "UTC"
 
 # ----------------------------------------------------------------------
 # Helper: estrazione testo da PDF (pypdf)
@@ -147,7 +146,7 @@ def call_groq_for_cv(cv_text: str) -> dict:
 
     try:
         completion = client.chat.completions.create(
-            model="llama-3-70b-versatile",   # modello veloce e di alta qualità su Groq
+            model="llama-3.3-70b-versatile",   # modello veloce e di alta qualità su Groq
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": user_prompt},

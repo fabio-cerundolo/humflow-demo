@@ -67,6 +67,8 @@ services:
     volumes:
       - ./backend:/app
       - uploads_data:/app/uploads
+    env_file:
+      - .env
     environment:
       - INTERNAL_API_SECRET=internal-secret-change-me-in-production
       - DATABASE_URL=postgresql://admin:password@db:5432/humflow
