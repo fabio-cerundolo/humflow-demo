@@ -1,7 +1,3 @@
-**humflow-demo – Updated README (WebSocket status clarified)**  
-
----  
-
 # humflow-demo  
 
 **Piattaforma HR Fullstack con Analisi CV Automatizzata e Architettura a Microservizi**  
