@@ -112,11 +112,16 @@ def ingest_emails_task():
                                     
                                     # 3. Invia email GDPR
                                     send_art14_email_task.delay(candidate.email, candidate.name or "Candidato")
+                                    # 🔥 NOTIFICA WebSocket ai frontend connessi (con secret)
                                     try:
-                                        # "backend" è il nome del servizio nel docker-compose.yml
-                                        requests.post("http://backend:8000/internal/notify-update", timeout=2)
+                                        internal_secret = os.getenv("INTERNAL_API_SECRET", "internal-secret-change-me-in-production")
+                                        requests.post(
+                                            "http://backend:8000/internal/notify-update",
+                                            params={"X-Internal-Secret": internal_secret},
+                                            timeout=2
+                                        )
                                     except Exception as e:
-                                        print(f"Impossibile notificare il frontend: {e}")
+                                        print(f"Impossibile notificare frontend: {e}")
                                     
                                     found = True
                                     break

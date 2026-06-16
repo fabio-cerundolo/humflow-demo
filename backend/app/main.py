@@ -11,9 +11,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-import jwt
 import bcrypt
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect, Query
+from fastapi.security import HTTPBearer
+import jwt
 
 
 from .database import SessionLocal, engine
@@ -411,9 +412,10 @@ def root():
 # ==========================================
 # CONFIGURAZIONE AUTENTICAZIONE (JWT)
 # ==========================================
-SECRET_KEY = "humflow_super_secret_key_cambiami_in_produzione"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "humflow_super_secret_key_cambiami_in_produzione")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 ore
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
+INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "internal-secret-change-me-in-production")
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -444,27 +446,54 @@ def login_for_access_token(login_data: LoginRequest, db: Session = Depends(get_d
     
     return {"access_token": access_token, "token_type": "bearer"}
 
-    # ==========================================
-# ENDPOINT: WEBSOCKET (Tempo Reale)
+# ==========================================
+# 🔥 WEBSOCKET ENDPOINT (TEMPO REALE) - CON AUTH
 # ==========================================
 @app.websocket("/ws/candidates")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     """
-    Mantiene una connessione aperta con il frontend.
+    WebSocket endpoint con autenticazione JWT.
+    Il token deve essere passato come query param: ws://localhost:8000/ws/candidates?token=...
     """
+    # Verifica il token PRIMA di accettare la connessione
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            await websocket.close(code=1008, reason="Token invalido")
+            return
+    except jwt.PyJWTError as e:
+        print(f"WebSocket auth failed: {e}")
+        await websocket.close(code=1008, reason="Token invalido o scaduto")
+        return
+    
+    # Token valido, accetta la connessione
     await manager.connect(websocket)
+    print(f"✅ WebSocket connesso: {username}")
+    
     try:
         while True:
-            # Mantiene la connessione viva aspettando eventuali messaggi dal client (opzionale)
-            await websocket.receive_text()
+            # Mantieni la connessione aperta aspettando eventuali messaggi dal client
+            # (opzionale, ma utile per keepalive o comandi dal client)
+            data = await websocket.receive_text()
+            # Se il client invia "ping", rispondi con "pong"
+            if data == "ping":
+                await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-
+        print(f"⚠️ WebSocket disconnesso: {username}")
+# ==========================================
+# 🔥 ENDPOINT INTERNO PROTETTO
+# ==========================================
 @app.post("/internal/notify-update")
-async def notify_update():
+async def notify_update(x_internal_secret: str = Query(..., alias="X-Internal-Secret")):
     """
-    Endpoint interno chiamato dal Worker (o dall'upload diretto) 
-    per dire a tutti i frontend connessi di aggiornare i dati.
+    Endpoint interno per notificare aggiornamenti ai client WebSocket.
+    Protetto da secret condiviso tra container Docker.
     """
+    # Verifica il secret
+    if x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
     await manager.broadcast("UPDATE_CANDIDATES")
-    return {"status": "notified"}
+    return {"status": "notified", "connections": len(manager.active_connections)}

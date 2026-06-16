@@ -9,7 +9,7 @@ services:
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d humflow"]
+      test: [ "CMD-SHELL", "pg_isready -U admin -d humflow" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,6 +40,8 @@ services:
       - ./backend:/app
       - uploads_data:/app/uploads
     environment:
+      - JWT_SECRET_KEY=humflow_super_secret_key_cambiami_in_produzione
+      - INTERNAL_API_SECRET=internal-secret-change-me-in-production
       - DATABASE_URL=postgresql://admin:password@db:5432/humflow
       - REDIS_URL=redis://redis:6379/0
       - SMTP_SERVER=mailhog
@@ -64,6 +66,7 @@ services:
       - ./backend:/app
       - uploads_data:/app/uploads
     environment:
+      - INTERNAL_API_SECRET=internal-secret-change-me-in-production
       - DATABASE_URL=postgresql://admin:password@db:5432/humflow
       - REDIS_URL=redis://redis:6379/0
       - SMTP_SERVER=mailhog

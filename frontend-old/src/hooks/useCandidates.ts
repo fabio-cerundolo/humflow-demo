@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios, { AxiosInstance } from 'axios';
 import { Candidate, DashboardStats } from '../types';
-import { useCandidatesWebSocket } from './useWebSocket';
+import { useCandidatesWebSocket } from '../../../frontend/src/hooks/useWebSocket';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -46,15 +46,12 @@ export const useCandidates = (token: string | null) => {
     }
   }, [api, token]);
 
-  // Caricamento iniziale
-  useEffect(() => {
-    if (token) fetchData();
-  }, [token, fetchData]);
 
-  // 🔥 WEBSOCKET: sostituisce il polling ogni 30s
+
   useCandidatesWebSocket(() => {
-    fetchData(true); // silent refresh
-  });
+    console.log('WebSocket ha triggerato un aggiornamento silenzioso');
+    fetchData();
+  }, token);
 
   const availableSkills = useMemo(() => {
     return Array.from(new Set(candidates.flatMap(c => c.skills || []))).sort();
