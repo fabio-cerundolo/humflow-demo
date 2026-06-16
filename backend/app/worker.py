@@ -112,6 +112,12 @@ def ingest_emails_task():
                                     
                                     # 3. Invia email GDPR
                                     send_art14_email_task.delay(candidate.email, candidate.name or "Candidato")
+                                    try:
+                                        # "backend" è il nome del servizio nel docker-compose.yml
+                                        requests.post("http://backend:8000/internal/notify-update", timeout=2)
+                                    except Exception as e:
+                                        print(f"Impossibile notificare il frontend: {e}")
+                                    
                                     found = True
                                     break
 

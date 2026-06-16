@@ -3,6 +3,8 @@ import io
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
+from .websocket_manager import manager
+
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -11,6 +13,8 @@ from sqlalchemy import func
 from pydantic import BaseModel
 import jwt
 import bcrypt
+from fastapi import WebSocket, WebSocketDisconnect
+
 
 from .database import SessionLocal, engine
 from .models import Base, Candidate, Skill, candidate_skills, User
@@ -439,3 +443,28 @@ def login_for_access_token(login_data: LoginRequest, db: Session = Depends(get_d
     access_token = create_access_token(data={"sub": user.username})
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+    # ==========================================
+# ENDPOINT: WEBSOCKET (Tempo Reale)
+# ==========================================
+@app.websocket("/ws/candidates")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    Mantiene una connessione aperta con il frontend.
+    """
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Mantiene la connessione viva aspettando eventuali messaggi dal client (opzionale)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+@app.post("/internal/notify-update")
+async def notify_update():
+    """
+    Endpoint interno chiamato dal Worker (o dall'upload diretto) 
+    per dire a tutti i frontend connessi di aggiornare i dati.
+    """
+    await manager.broadcast("UPDATE_CANDIDATES")
+    return {"status": "notified"}

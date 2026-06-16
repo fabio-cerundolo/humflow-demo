@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios, { AxiosInstance } from 'axios';
 import { Candidate, DashboardStats } from '../types';
+import { useCandidatesWebSocket } from './useWebSocket';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -25,12 +26,13 @@ export const useCandidates = (token: string | null) => {
   const api: AxiosInstance = useMemo<AxiosInstance>(() => axios.create({
     baseURL: API_URL,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
+    timeout: 10000,
   }), [token]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!token) return;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [candidatesRes, statsRes] = await Promise.all([
         api.get('/candidates'),
         api.get('/stats')
@@ -38,35 +40,33 @@ export const useCandidates = (token: string | null) => {
       setCandidates(candidatesRes.data);
       setStats(statsRes.data);
     } catch (error) {
-      console.error('Errore nel caricamento dei dati:', error);
+      console.error('Errore caricamento dati:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [api, token]);
 
+  // Caricamento iniziale
   useEffect(() => {
     if (token) fetchData();
   }, [token, fetchData]);
 
-  useEffect(() => {
-    if (!token) return;
-    const intervalId = setInterval(fetchData, 30000);
-    return () => clearInterval(intervalId);
-  }, [token, fetchData]);
+  // 🔥 WEBSOCKET: sostituisce il polling ogni 30s
+  useCandidatesWebSocket(() => {
+    fetchData(true); // silent refresh
+  });
 
   const availableSkills = useMemo(() => {
     return Array.from(new Set(candidates.flatMap(c => c.skills || []))).sort();
   }, [candidates]);
 
-  // 🔥 CORREZIONE: Ora la ricerca controlla anche le skill
   const filteredCandidates = useMemo(() => {
     return candidates.filter(c => {
       const lowerSearch = searchTerm.toLowerCase();
-
       const matchesSearch =
         c.name?.toLowerCase().includes(lowerSearch) ||
         c.email.toLowerCase().includes(lowerSearch) ||
-        (c.skills && c.skills.some(skill => skill.toLowerCase().includes(lowerSearch))); // <-- AGGIUNTO
+        (c.skills && c.skills.some(skill => skill.toLowerCase().includes(lowerSearch)));
 
       const matchesSkills =
         selectedSkills.length === 0 ||
@@ -158,15 +158,14 @@ export const useCandidates = (token: string | null) => {
       await api.delete(`/candidates/${id}`);
       await fetchData();
     } catch (error) {
-      console.error("Errore eliminazione candidato:", error);
+      console.error("Errore eliminazione:", error);
     }
   };
 
   const deleteAllCandidates = async () => {
     try {
-      // Usa POST perché abbiamo cambiato l'endpoint da DELETE a POST per evitare errori CORS
       await api.post('/candidates/bulk-delete-all');
-      await fetchData(); // Ricarica i dati dopo l'eliminazione
+      await fetchData();
     } catch (error) {
       console.error('Errore eliminazione totale:', error);
     }
@@ -176,7 +175,6 @@ export const useCandidates = (token: string | null) => {
     try {
       await api.patch(`/candidates/${id}/status`, { status: newStatus });
       setCandidates(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
-      await fetchData();
     } catch (error) {
       console.error('Errore aggiornamento stato:', error);
     }

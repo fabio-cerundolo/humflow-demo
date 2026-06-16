@@ -255,9 +255,8 @@ function PipelineCard({ c }: { c: PipelineCandidate }) {
       layoutId={`candidate-${c.initials}-${c.id}`}
       layout
       transition={layoutTransition}
-      className={`group bg-surface p-4 rounded-lg border border-ink/5 hover:border-gold/40 cursor-pointer ${
-        c.status === "Nuovo" ? "opacity-60 hover:opacity-100" : ""
-      }`}
+      className={`group bg-surface p-4 rounded-lg border border-ink/5 hover:border-gold/40 cursor-pointer ${c.status === "Nuovo" ? "opacity-60 hover:opacity-100" : ""
+        }`}
     >
       <div className="flex justify-between items-start mb-3">
         <div className="size-10 bg-canvas rounded-full flex items-center justify-center text-xs font-bold">
@@ -281,15 +280,14 @@ function TimelineCard({ c, last }: { c: PipelineCandidate; last: boolean }) {
       className="pl-6 relative list-none"
     >
       <span
-        className={`absolute -left-[7px] top-1.5 size-3 rounded-full ring-4 ring-paper ${
-          c.status === "Matchato"
+        className={`absolute -left-[7px] top-1.5 size-3 rounded-full ring-4 ring-paper ${c.status === "Matchato"
             ? "bg-emerald-mid"
             : c.status === "In Analisi"
               ? "bg-gold"
               : c.status === "Nuovo"
                 ? "bg-ink/30"
                 : "bg-red-500"
-        }`}
+          }`}
       />
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex-1">
@@ -541,9 +539,8 @@ function ArchiveSection({
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-[11px] font-display font-bold uppercase tracking-wider rounded-md transition-colors ${
-                  active ? "bg-emerald-deep text-paper" : "text-ink/60 hover:text-ink"
-                }`}
+                className={`px-3 py-1.5 text-[11px] font-display font-bold uppercase tracking-wider rounded-md transition-colors ${active ? "bg-emerald-deep text-paper" : "text-ink/60 hover:text-ink"
+                  }`}
               >
                 {f}
               </button>
@@ -609,11 +606,10 @@ function ArchiveSection({
                   onClick={() => handleDownload(r.id, r.name)}
                   disabled={downloadingId === r.id}
                   title={downloadError?.id === r.id ? downloadError.msg : 'Scarica CV'}
-                  className={`text-[10px] font-mono px-2 py-1 rounded transition-colors flex items-center gap-1 ${
-                    downloadError?.id === r.id
+                  className={`text-[10px] font-mono px-2 py-1 rounded transition-colors flex items-center gap-1 ${downloadError?.id === r.id
                       ? 'bg-red-500/10 text-red-500'
                       : 'bg-emerald-mid/10 text-emerald-mid hover:bg-emerald-mid/20'
-                  } ${downloadingId === r.id ? 'opacity-50 cursor-wait' : ''}`}
+                    } ${downloadingId === r.id ? 'opacity-50 cursor-wait' : ''}`}
                 >
                   {downloadingId === r.id ? (
                     <span className="inline-block animate-spin">⟳</span>
@@ -928,9 +924,8 @@ function SkillGapView({ candidates }: { candidates: Candidate[] }) {
 
                   <div className="h-2 w-full bg-canvas rounded-full overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-500 ${
-                        pct >= 100 ? "bg-emerald-mid" : pct >= 50 ? "bg-gold" : "bg-red-500"
-                      }`}
+                      className={`h-full transition-all duration-500 ${pct >= 100 ? "bg-emerald-mid" : pct >= 50 ? "bg-gold" : "bg-red-500"
+                        }`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -1262,12 +1257,9 @@ function GdprView({ onCleanSuccess }: { onCleanSuccess: () => void }) {
 
 /* ---------------- MAIN CONTAINER ---------------- */
 function AppContainer() {
-  const [token, setToken] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("token");
-    }
-    return null;
-  });
+  // 🔥 FIX: Inizializza con null (uguale su server e client)
+  const [token, setToken] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -1278,14 +1270,26 @@ function AppContainer() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("dashboard"); // "dashboard", "skillgap", "calendar", "reports", "gdpr"
+  const [view, setView] = useState("dashboard");
   const [searchSkillFilter, setSearchSkillFilter] = useState<string[]>([]);
 
   // UI Theme states
-  const [dark, setDark] = useState(() => {
-    if (typeof document === "undefined") return false;
-    return document.documentElement.classList.contains("dark");
-  });
+  const [dark, setDark] = useState(false);
+
+  // 🔥 FIX: Leggi localStorage SOLO dopo il mount sul client
+  useEffect(() => {
+    setIsMounted(true);
+    const savedToken = localStorage.getItem("token");
+    if (savedToken) {
+      setToken(savedToken);
+    }
+
+    // Leggi anche il tema
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") {
+      setDark(true);
+    }
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -1307,7 +1311,6 @@ function AppContainer() {
     } catch (err: any) {
       console.error(err);
       if (err.message && err.message.includes("Impossibile caricare")) {
-        // Probabilmente token scaduto
         handleLogout();
       }
     } finally {
@@ -1323,8 +1326,13 @@ function AppContainer() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (dark) root.classList.add("dark");
-    else root.classList.remove("dark");
+    if (dark) {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
   }, [dark]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -1415,7 +1423,6 @@ function AppContainer() {
       const diffMins = Math.floor(diffMs / 60000);
       const diffHours = Math.floor(diffMins / 60);
       const diffDays = Math.floor(diffHours / 24);
-
       if (diffMins < 60) return `${diffMins}m fa`;
       if (diffHours < 24) return `${diffHours}h fa`;
       return `${diffDays}g fa`;
@@ -1425,7 +1432,6 @@ function AppContainer() {
   };
 
   const REQUIRED_SKILLS = ["python", "react", "typescript", "aws", "leadership"];
-  
   const mappedPipeline: PipelineCandidate[] = candidates
     .filter(c => c.status !== 'rejected')
     .map(c => {
@@ -1446,7 +1452,7 @@ function AppContainer() {
 
   const filteredArchiveCandidates = candidates.filter(c => {
     if (searchSkillFilter.length === 0) return true;
-    return searchSkillFilter.every(skillName => 
+    return searchSkillFilter.every(skillName =>
       c.skills?.some(s => s.toLowerCase() === skillName.toLowerCase())
     );
   });
@@ -1463,14 +1469,33 @@ function AppContainer() {
       match: match,
       date: new Date(c.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }),
       tags: c.skills ? c.skills.slice(0, 3) : [],
+      cv_file_path: c.cv_file_path,
     };
   });
 
+  const handleDownloadCv = async (id: number, name: string) => {
+    await api.downloadCv(token, id, name);
+  };
+
+  // 🔥 FIX: Durante il primo render (server e client), mostra sempre un loader
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-canvas text-ink flex items-center justify-center p-6 transition-colors">
+        <div className="animate-pulse text-center">
+          <div className="size-12 bg-emerald-deep flex items-center justify-center rounded-sm mb-3 mx-auto">
+            <div className="size-4 border-2 border-gold rotate-45" />
+          </div>
+          <p className="text-xs font-mono uppercase tracking-widest text-ink/40">Caricamento...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔥 FIX: Dopo il mount, puoi usare localStorage in sicurezza
   if (!token) {
     return (
       <div className="min-h-screen bg-canvas text-ink flex items-center justify-center p-6 transition-colors">
         <div className="w-full max-w-md bg-surface border border-ink/5 p-8 rounded-xl shadow-lg relative overflow-hidden animate-in">
-          {/* Logo */}
           <div className="flex flex-col items-center mb-8">
             <div className="size-12 bg-emerald-deep flex items-center justify-center rounded-sm mb-3">
               <div className="size-4 border-2 border-gold rotate-45" />
@@ -1529,7 +1554,7 @@ function AppContainer() {
   }
 
   return (
-    <Dashboard 
+    <Dashboard
       candidates={candidates}
       stats={stats}
       loading={loading}
@@ -1544,6 +1569,7 @@ function AppContainer() {
       onDeleteCandidate={handleDeleteCandidate}
       onStatusChange={handleStatusChange}
       onBriefSearch={handleBriefSearchTrigger}
+      onDownloadCv={handleDownloadCv}
     />
   );
 }
@@ -1564,6 +1590,7 @@ function Dashboard({
   onDeleteCandidate,
   onStatusChange,
   onBriefSearch,
+  onDownloadCv,
 }: {
   candidates: Candidate[];
   stats: Stats | null;
@@ -1579,6 +1606,7 @@ function Dashboard({
   onDeleteCandidate: (id: number) => void;
   onStatusChange: (id: number, status: string) => void;
   onBriefSearch: (skills: string[]) => void;
+  onDownloadCv: (id: number, name: string) => Promise<void>;
 }) {
   const [variant, setVariant] = useState<Variant>("compact");
 
@@ -1592,49 +1620,49 @@ function Dashboard({
           <span className="font-display text-xl font-bold tracking-tight uppercase">Humflow</span>
         </div>
         <div className="flex items-center gap-6 text-sm font-medium">
-          <button 
+          <button
             onClick={() => { setView("dashboard"); setTimeout(() => document.getElementById("dashboard")?.scrollIntoView({ behavior: 'smooth' }), 50); }}
             className={`hover:opacity-60 transition-opacity ${view === "dashboard" ? "font-bold text-emerald-mid" : "opacity-60"}`}
           >
             Dashboard
           </button>
-          <button 
+          <button
             onClick={() => { setView("dashboard"); setTimeout(() => document.getElementById("archivio")?.scrollIntoView({ behavior: 'smooth' }), 50); }}
             className="opacity-60 hover:opacity-100 transition-opacity"
           >
             Archivio
           </button>
-          <button 
+          <button
             onClick={() => { setView("dashboard"); setTimeout(() => document.getElementById("nuova-ricerca")?.scrollIntoView({ behavior: 'smooth' }), 50); }}
             className="opacity-60 hover:opacity-100 transition-opacity"
           >
             Nuova Ricerca
           </button>
-          <button 
+          <button
             onClick={() => setView("skillgap")}
             className={`hover:opacity-60 transition-opacity ${view === "skillgap" ? "font-bold text-emerald-mid" : "opacity-60"}`}
           >
             Skill Gap
           </button>
-          <button 
+          <button
             onClick={() => setView("reports")}
             className={`hover:opacity-60 transition-opacity ${view === "reports" ? "font-bold text-emerald-mid" : "opacity-60"}`}
           >
             Report
           </button>
-          <button 
+          <button
             onClick={() => setView("calendar")}
             className={`hover:opacity-60 transition-opacity ${view === "calendar" ? "font-bold text-emerald-mid" : "opacity-60"}`}
           >
             Colloqui
           </button>
-          <button 
+          <button
             onClick={() => setView("gdpr")}
             className={`hover:opacity-60 transition-opacity ${view === "gdpr" ? "font-bold text-emerald-mid" : "opacity-60"}`}
           >
             Privacy
           </button>
-          
+
           <div className="h-4 w-px bg-ink/10" />
           <button
             type="button"
@@ -1644,7 +1672,7 @@ function Dashboard({
           >
             <span className="text-base leading-none">{dark ? "☀" : "☾"}</span>
           </button>
-          
+
           <button
             onClick={onLogout}
             className="px-4 py-2 border border-red-500/30 text-red-500 rounded-sm hover:bg-red-500/10 transition-colors"
@@ -1682,16 +1710,14 @@ function Dashboard({
                         />
                       )}
                       <span
-                        className={`block font-display font-bold uppercase tracking-wider text-[11px] transition-colors ${
-                          active ? "text-paper" : "text-ink/60"
-                        }`}
+                        className={`block font-display font-bold uppercase tracking-wider text-[11px] transition-colors ${active ? "text-paper" : "text-ink/60"
+                          }`}
                       >
                         {v.label}
                       </span>
                       <span
-                        className={`block text-[9px] font-mono mt-0.5 transition-colors ${
-                          active ? "text-gold" : "text-ink/50"
-                        }`}
+                        className={`block text-[9px] font-mono mt-0.5 transition-colors ${active ? "text-gold" : "text-ink/50"
+                          }`}
                       >
                         {v.hint}
                       </span>
@@ -1711,22 +1737,22 @@ function Dashboard({
                   transition={fadeTransition}
                 >
                   {variant === "compact" && (
-                    <CompactVariant 
-                      pipelineData={pipelineData} 
+                    <CompactVariant
+                      pipelineData={pipelineData}
                       onUploadSuccess={onUploadSuccess}
                       stats={stats}
                     />
                   )}
                   {variant === "extended" && (
-                    <ExtendedVariant 
-                      pipelineData={pipelineData} 
+                    <ExtendedVariant
+                      pipelineData={pipelineData}
                       onUploadSuccess={onUploadSuccess}
                       stats={stats}
                     />
                   )}
                   {variant === "timeline" && (
-                    <TimelineVariant 
-                      pipelineData={pipelineData} 
+                    <TimelineVariant
+                      pipelineData={pipelineData}
                       onUploadSuccess={onUploadSuccess}
                       stats={stats}
                     />
@@ -1736,12 +1762,13 @@ function Dashboard({
             </LayoutGroup>
           </section>
 
-          <ArchiveSection 
-            rows={archiveData} 
+          <ArchiveSection
+            rows={archiveData}
             onDelete={onDeleteCandidate}
             onStatusChange={onStatusChange}
+            onDownload={onDownloadCv}
           />
-          
+
           <NewSearchSection onSearchTrigger={onBriefSearch} />
         </>
       )}
