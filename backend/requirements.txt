@@ -16,3 +16,6 @@ python-dotenv
 alembic
 PyJWT
 websockets
+groq>=1.2.0
+pdfminer.six
+pypdf

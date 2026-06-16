@@ -36,4 +36,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(
+        DateTime(timezone=True),          # consigliato: gestisce fusi orari
+        nullable=False,
+        server_default=func.now(),        # default a livello di DB
+        # default=datetime.utcnow          # opzionale, mantiene anche il default ORM
+    )
