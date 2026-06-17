@@ -23,14 +23,16 @@ graph TD
     end
 
     subgraph External
-        AI[OpenRouter API / Vision-Language<br/>Qwen2-VL & Specialized Parser]
+        AI[Groq API / Llama 3.3<br/>CV Analysis - Cloud]
+        Local[Ollama / Llama 3.1 8B<br/>CV Analysis - Locale]
     end
 
     UI -->|REST / JWT| API
     API -->|Read/Write| DB
     API -->|Dispatch Task| Broker
     Broker -->|Consume| Worker
-    Worker -->|Process PDF| AI
+    Worker -->|AI_PROVIDER=groq| AI
+    Worker -.->|AI_PROVIDER=ollama| Local
     Worker -->|Save Result| DB
     Worker -->|Send Notification| Mail
     Mail -.->|Test Inbox| UI
@@ -38,26 +40,23 @@ graph TD
 
 *(Nota: GitHub renderizzerà automaticamente questo blocco come un diagramma visivo)*  
 
+> **Provider AI configurabile**: la fase di analisi CV può usare **Groq** (cloud, default, richiede API key) oppure **Ollama** (modello locale, nessuna dipendenza cloud, ideale per PC senza GPU NVIDIA potente o per ambienti offline/air-gapped). Si seleziona con la variabile `AI_PROVIDER` — vedi la sezione [Pipeline AI: Cloud vs Locale](#pipeline-ai-cloud-vs-locale).
+
 ## Tech Stack  
 
 | Componente | Tecnologia | Motivazione Architetturale |
 | --- | --- | --- |
 | **Frontend** | React 18, TypeScript, Tailwind CSS | Type-safety e sviluppo rapido di interfacce reattive e manutenibili. |
 | **Backend API** | Python, FastAPI, Uvicorn | Performance asincrone native e validazione dati robusta tramite Pydantic. |
-| **Task Queue** | Celery, Redis | Gestione affidabile di operazioni I/O-bound (analisi AI Vision/Text) senza bloccare il thread principale dell'API. |
+| **Task Queue** | Celery, Redis | Gestione affidabile di operazioni I/O-bound (analisi AI) senza bloccare il thread principale dell'API. |
 | **Database** | PostgreSQL 16 | Affidabilità, supporto JSONB e integrità referenziale per i dati strutturati dei candidati. |
-| **Infrastructure** | Docker, Poppler | Supporto alla pipeline Vision (conversione PDF -> Immagini) e isolamento netto dei servizi. |
+| **Infrastructure** | Docker, Docker Compose | Riproducibilità dell'ambiente di sviluppo e isolamento netto dei servizi. |
 | **Testing** | MailHog | Sandbox SMTP per testare flussi di notifica in isolamento, senza inquinare ambienti reali. |
+| **AI Analysis** | Groq API (Llama 3.3) *oppure* Ollama locale (Llama 3.1 8B) | Estrazione strutturata dei dati dal CV. Doppio provider selezionabile via `AI_PROVIDER`: cloud per velocità/qualità massime, locale per zero costi e nessuna dipendenza da rete/API key esterna. |
 
 ## Scelte Architetturali (Architecture Decision Records)
 
-1. **Analisi Multi-livello (Vision & Text)**
-   Il sistema adotta una pipeline di parsing CV a tre livelli per garantire massima precisione e resilienza:
-   - **Livello 1: Vision-Language (Specialistica)**. Il PDF viene convertito in immagini e analizzato da modelli Vision (es. Qwen2-VL) per preservare il layout spaziale.
-   - **Livello 2: Lightweight Text (PC Leggeri)**. Estrazione testuale avanzata via PyMuPDF combinata con modelli LLM compatti (8B come Llama 3.1). Ideale per efficienza e rapidità.
-   - **Livello 3: Heavy Text (Fallback)**. Analisi testuale classica con modelli LLM pesanti (Gemma 4, Llama 70B) per gestire testi complessi quando gli altri livelli falliscono.
-
-2. **Separazione API / Worker (Pattern Producer-Consumer)**  
+1. **Separazione API / Worker (Pattern Producer-Consumer)**  
    L'analisi di un PDF e la successiva chiamata a un'API di LLM sono operazioni con latenza variabile (1‑3 secondi). Eseguirle in modo sincrono all'interno della richiesta HTTP avrebbe bloccato i worker di FastAPI, degradando l'esperienza utente sotto carico. Delegando il task a Celery, l'API risponde immediatamente, garantendo alta disponibilità e permettendo al frontend di **fare polling** o, in futuro, usare **WebSocket** per il risultato.  
 
 2. **Scelta di FastAPI rispetto a Django/Flask**  
@@ -66,13 +65,18 @@ graph TD
 3. **Redis come Message Broker**  
    Sebbene RabbitMQ o Kafka siano alternative valide per code complesse o ad alto throughput, Redis è stato scelto per questo progetto per la sua leggerezza, facilità di configurazione in Docker Compose e prestazioni eccellenti per code di task semplici e transienti.  
 
+4. **Provider AI intercambiabile (Groq cloud / Ollama locale)**  
+   L'analisi del CV è isolata dietro un semplice switch (`AI_PROVIDER`) invece di essere accoppiata a un singolo fornitore. Questo permette di usare Groq in produzione (latenza minima, nessun hardware dedicato richiesto) oppure Ollama in locale per sviluppo, demo offline, o contesti con vincoli di costo/privacy in cui i CV non devono uscire dalla macchina. Il modulo `ollama_processor.py` restituisce lo stesso schema JSON di `call_groq_for_cv`, quindi il resto della pipeline (creazione candidato, skill, screening, notifiche) resta identico indipendentemente dal provider scelto.  
+
 > **⚠️ Nota importante sul WebSocket**  
 > Nella sezione precedente il README menziona il WebSocket solo come *possibile alternativa* al polling per comunicare i risultati dei task al frontend. **Attualmente il progetto non implementa alcun canale WebSocket/Socket.IO**; la comunicazione frontend‑backend avviene esclusivamente tramite richieste REST/JWT. Se si desidera ottenere aggiornamenti in tempo reale senza polling, sarà necessario aggiungere un layer WebSocket (ad es. Socket.IO) sia al backend FastAPI che al frontend React.
 
 ## Prerequisiti  
 
 - [Docker](https://www.docker.com/) e [Docker Compose](https://docs.docker.com/compose/) installati e in esecuzione.  
-- Una API Key valida per [OpenRouter](https://openrouter.ai/) (per l'analisi AI dei CV).
+- Per l'analisi AI dei CV, uno tra:
+  - una API Key valida per [Groq](https://console.groq.com) (provider cloud, default), **oppure**
+  - [Ollama](https://ollama.com) installato e in esecuzione in locale, con il modello scaricato (es. `ollama pull llama3.1:8b`) — vedi [Pipeline AI: Cloud vs Locale](#pipeline-ai-cloud-vs-locale).
 
 ## Avvio Rapido (Quick Start)  
 
@@ -90,8 +94,11 @@ L'intera infrastruttura (5 servizi) può essere avviata localmente con un singol
    Crea un file `.env` nella root del progetto basandoti su `.env.example`:  
 
    ```env
-   OPENROUTER_API_KEY=la_tua_api_key_qui
+   GROQ_API_KEY=la_tua_api_key_qui
    # Le altre variabili (DB, Redis, SMTP) sono preconfigurate per l'ambiente Docker locale
+
+   # Opzionale: per usare un modello locale via Ollama invece di Groq
+   # AI_PROVIDER=ollama
    ```
 
 3. **Avvia l'infrastruttura**  
@@ -108,6 +115,43 @@ L'intera infrastruttura (5 servizi) può essere avviata localmente con un singol
    - **Documentazione API (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)  
    - **MailHog (Sandbox Email)**: [http://localhost:8025](http://localhost:8025)  
 
+## Pipeline AI: Cloud vs Locale
+
+L'analisi del CV è disaccoppiata dal fornitore tramite la variabile d'ambiente `AI_PROVIDER`:
+
+| `AI_PROVIDER` | Estrazione testo | Modello | Quando usarlo |
+| --- | --- | --- | --- |
+| `groq` (default) | `pypdf` | Llama 3.1/3.3 via [Groq API](https://console.groq.com) | Setup più semplice, latenza minima, nessun hardware dedicato. |
+| `ollama` | `PyMuPDF` | Modello locale (es. `llama3.1:8b`, `mistral:7b`, `phi3`) via [Ollama](https://ollama.com) | Nessun costo per chiamata, nessuna API key, CV che non devono uscire dalla macchina, ambienti offline. |
+
+**Requisiti hardware indicativi per `ollama` con `llama3.1:8b` (quantizzato, ~5 GB):**
+- almeno 8 GB di RAM libera (consigliati 16 GB, dato che lo stack Docker gira in parallelo);
+- nessuna GPU richiesta, ma su sola CPU l'analisi di un CV può richiedere da pochi secondi a oltre un minuto in base al processore;
+- con una GPU dedicata (NVIDIA via CUDA o AMD via ROCm) l'analisi scende tipicamente sotto i 5-10 secondi.
+
+**Come attivare `ollama`:**
+
+1. Installa [Ollama](https://ollama.com) sull'host e scarica il modello:
+   ```bash
+   ollama pull llama3.1:8b
+   ```
+2. Assicurati che Ollama sia in ascolto su tutte le interfacce (necessario perché il worker, in un container, deve raggiungerlo dall'host):
+   ```bash
+   # systemd (Linux)
+   sudo systemctl edit ollama
+   # aggiungi sotto [Service]:
+   # Environment="OLLAMA_HOST=0.0.0.0"
+   sudo systemctl restart ollama
+   ```
+3. Nel tuo `.env`, imposta:
+   ```env
+   AI_PROVIDER=ollama
+   OLLAMA_MODEL=llama3.1:8b
+   ```
+4. Il worker raggiunge Ollama tramite `host.docker.internal` (mappato in `docker-compose.yml` con `extra_hosts: host-gateway`, necessario su Linux nativo dove questo DNS non esiste di default come su Docker Desktop).
+
+Per tornare al provider cloud basta rimuovere `AI_PROVIDER` dal `.env` (o impostarlo a `groq`): nessun'altra modifica è necessaria, lo schema dei dati estratti è identico per entrambi i provider.
+
 ## Struttura del Progetto  
 
 ```
@@ -120,7 +164,9 @@ humflow-demo/
 │   │   ├── api/              # Endpoint REST
 │   │   ├── core/             # Configurazione e dipendenze
 │   │   ├── models/           # Modelli Pydantic e SQLAlchemy
-│   │   └── tasks/            # Definizione dei task Celery
+│   │   ├── services/
+│   │   │   └── ollama_processor.py  # Pipeline AI locale (PyMuPDF + Ollama), alternativa a Groq
+│   │   └── tasks/             # Definizione dei task Celery
 │   ├── celery_worker.py      # Entry point del worker asincrono
 │   └── requirements.txt
 ├── docker-compose.yml        # Orchestrazione dei 5 servizi
@@ -172,4 +218,4 @@ Questo progetto è distribuito con licenza MIT. Vedere il file `LICENSE` per i d
 
 ---  
 
-*Questo README è stato aggiornato per chiarire lo stato attuale dell'implementazione WebSocket e fornire indicazioni su come aggiungerla in futuro.*
+*Questo README è stato aggiornato per chiarire lo stato attuale dell'implementazione WebSocket, fornire indicazioni su come aggiungerla in futuro, e documentare il provider AI locale (Ollama) introdotto come alternativa a Groq.*
