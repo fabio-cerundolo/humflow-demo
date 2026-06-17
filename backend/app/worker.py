@@ -3,6 +3,7 @@
 worker.py — Celery worker per humflow (versione con Groq AI).
 """
 
+import io
 import os
 import base64
 import smtplib
@@ -77,7 +78,7 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     Restituisce il testo leggibile di un PDF fornito come bytes.
     """
     try:
-        reader = pypdf.PdfReader(Path(file_bytes))  # pypdf accetta anche BytesIO
+        reader = pypdf.PdfReader(io.BytesIO(file_bytes))
     except Exception as exc:  # pragma: no cover
         logger.error("Impossibile aprire il PDF: %s", exc)
         return ""
@@ -146,7 +147,7 @@ def call_groq_for_cv(cv_text: str) -> dict:
 
     try:
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",   # modello veloce e di alta qualità su Groq
+            model="llama-3.1-8b-instant",   # modello più leggero per evitare rate-limit
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": user_prompt},
@@ -278,28 +279,45 @@ def ingest_emails_task():
                             continue  # passa al prossimo allegato/email
 
                         # ---- 3️⃣ Creazione record ORM ----
-                        candidate = Candidate(
-                            full_name=groq_result.get("full_name"),
-                            email=groq_result.get("email"),
-                            phone=groq_result.get("phone"),
-                            summary=groq_result.get("summary", ""),
-                            # i campi experience, education, languages vengono salvati come JSON
-                            experience=groq_result.get("experience", []),
-                            education=groq_result.get("education", []),
-                            languages=groq_result.get("languages", []),
-                        )
-                        db.add(candidate)
-                        db.flush()  # ottieni l'id prima di aggiungere le skill
+                        # Controlliamo se il candidato esiste già per email
+                        from sqlalchemy import select
+                        stmt_cand = select(Candidate).where(Candidate.email == groq_result.get("email"))
+                        candidate = db.execute(stmt_cand).scalar_one_or_none()
+
+                        if not candidate:
+                            candidate = Candidate(
+                                name=groq_result.get("full_name"),
+                                email=groq_result.get("email"),
+                                phone=groq_result.get("phone"),
+                                status="new",
+                            )
+                            db.add(candidate)
+                            db.flush()  # ottieni l'id prima di aggiungere le skill
+                        else:
+                            logger.info("Candidato con email %s già esistente, aggiorno info.", candidate.email)
+                            candidate.name = groq_result.get("full_name") or candidate.name
+                            candidate.phone = groq_result.get("phone") or candidate.phone
 
                         # Skill: assumiamo una relazione molti‑a‑molti tramite tabella candidate_skill
-                        # oppure una semplice tabella Skill con foreign key candidate_id.
-                        # Qui inseriamo una riga per ogni skill nella tabella Skill.
+                        # Inseriamo o recuperiamo la skill per nome e la associamo al candidato
                         skill_objs = []
                         for skill_name in groq_result.get("skills", []):
                             if not skill_name or not isinstance(skill_name, str):
                                 continue
-                            skill = Skill(name=skill_name.strip(), candidate_id=candidate.id)
-                            db.add(skill)
+                            
+                            # Cerchiamo se la skill esiste già
+                            from sqlalchemy import select
+                            stmt = select(Skill).where(Skill.name == skill_name.strip())
+                            skill = db.execute(stmt).scalar_one_or_none()
+                            
+                            if not skill:
+                                skill = Skill(name=skill_name.strip())
+                                db.add(skill)
+                                db.flush()
+                            
+                            if skill not in candidate.skills:
+                                candidate.skills.append(skill)
+                            
                             skill_objs.append(skill)
 
                         # ---- 4️⃣ Screening automatico (3 livelli) ----
@@ -347,7 +365,7 @@ def ingest_emails_task():
                         try:
                             send_art14_email_task.delay(
                                 candidate.email,
-                                candidate.full_name or "Candidato",
+                                candidate.name or "Candidato",
                             )
                         except Exception as e:
                             logger.error(

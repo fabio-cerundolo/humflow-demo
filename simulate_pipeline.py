@@ -20,7 +20,7 @@ ALIASES = [
 
 def send_cv_from_file(file_path, sender_email):
     file_name = os.path.basename(file_path)
-    print(f"📦 Elaborazione file: {file_name}...")
+    print(f"[*] Elaborazione file: {file_name}...")
     
     # 1. Creazione del messaggio
     msg = EmailMessage()
@@ -48,28 +48,28 @@ def send_cv_from_file(file_path, sender_email):
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.send_message(msg)
-        print(f"✅ Inviato con successo da: {sender_email}")
+        print(f"[OK] Inviato con successo da: {sender_email}")
         
         # AUTO-ELIMINAZIONE DEL FILE DOPO INVIO RIUSCITO
         os.remove(file_path)
-        print(f"🗑️  Eliminato automaticamente: {file_name}")
+        print(f"[CLEANUP] Eliminato automaticamente: {file_name}")
         
     except Exception as e:
-        print(f"❌ Errore durante l'invio di {file_name}: {e}")
-        print("⚠️  Il file NON è stato eliminato a causa dell'errore.")
+        print(f"[ERR] Errore durante l'invio di {file_name}: {e}")
+        print("[!] Il file NON è stato eliminato a causa dell'errore.")
 
 def run():
     if not os.path.exists(SOURCE_FOLDER):
-        print(f"❌ Errore: La cartella '{SOURCE_FOLDER}' non esiste. Creala e inserisci i PDF.")
+        print(f"[ERR] Errore: La cartella '{SOURCE_FOLDER}' non esiste. Creala e inserisci i PDF.")
         return
         
     files = [f for f in os.listdir(SOURCE_FOLDER) if f.endswith(('.pdf', '.docx'))]
 
     if not files:
-        print(f"⚠️  Nessun file PDF o DOCX trovato in '{SOURCE_FOLDER}'.")
+        print(f"[!] Nessun file PDF o DOCX trovato in '{SOURCE_FOLDER}'.")
         return
 
-    print(f"🚀 Trovati {len(files)} file. Inizio invio pipeline...\n")
+    print(f"[START] Trovati {len(files)} file. Inizio invio pipeline...\n")
 
     for i, file_name in enumerate(files):
         path = os.path.join(SOURCE_FOLDER, file_name)
@@ -77,7 +77,7 @@ def run():
         sender = ALIASES[i % len(ALIASES)]
         send_cv_from_file(path, sender)
 
-    print("\n🏁 Simulazione completata!")
+    print("\n[DONE] Simulazione completata!")
     print("Controlla Mailhog (http://localhost:8025) e la Dashboard (http://localhost:3000).")
 
 if __name__ == "__main__":
