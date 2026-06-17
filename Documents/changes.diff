@@ -1,0 +1,104 @@
+diff --git a/.env.example b/.env.example
+index f267345..ed56991 100644
+--- a/.env.example
++++ b/.env.example
+@@ -32,3 +32,14 @@ FROM_EMAIL=privacy@fluxhr.com
+ # --- SICUREZZA JWT ---
+ # Cambia questo valore in produzione con una stringa casuale lunga!
+ SECRET_KEY=your-secret-key-change-in-production
++
++# --- ANALISI CV: provider AI ---
++# groq   -> (default) usa l'API cloud Groq, comportamento originale invariato.
++#           Richiede GROQ_API_KEY valida (https://console.groq.com).
++# ollama -> usa il tuo Ollama già in esecuzione sull'host (con GPU attiva), NON in un container.
++#           Il worker lo raggiunge tramite host.docker.internal (mappato via extra_hosts su Linux).
++AI_PROVIDER=groq
++
++# Usate solo se AI_PROVIDER=ollama
++OLLAMA_BASE_URL=http://host.docker.internal:11434
++OLLAMA_MODEL=llama3.1:8b
+diff --git a/backend/app/worker.py b/backend/app/worker.py
+index 1a0ce9e..d04da31 100644
+--- a/backend/app/worker.py
++++ b/backend/app/worker.py
+@@ -25,6 +25,7 @@ from app.models import Candidate, Skill
+ from .database import SessionLocal
+ from .models import Candidate, Skill   # <-- assicurati che questi import siano corretti
+ from .templates.gdpr_email import get_art14_html
++from .services.ollama_processor import call_ollama_for_cv, extract_text_from_pdf_local  # <-- pipeline locale (AI_PROVIDER=ollama)
+ 
+ 
+ 
+@@ -258,23 +259,28 @@ def ingest_emails_task():
+                             continue
+ 
+                         # ---- 1️⃣ Estrai testo dal PDF/DOCX ----
+-                        # Nota: pypdf gestisce solo PDF. Per DOCX potremmo usare python-docx,
+-                        # ma per semplicità trattiamo entrambi come PDF (il tuo flusso attuale
+-                        # probabilmente gestisce solo PDF). Se vuoi supportare DOCX, aggiungi
+-                        # qui la logica con python-docx.
+-                        cv_text = extract_text_from_pdf(file_bytes)
++                        # AI_PROVIDER=ollama -> pipeline locale leggera (estrazione con PyMuPDF)
++                        # AI_PROVIDER=groq (default, invariato) -> estrazione con pypdf
++                        ai_provider = os.getenv("AI_PROVIDER", "groq").lower()
++                        if ai_provider == "ollama":
++                            cv_text = extract_text_from_pdf_local(file_bytes)
++                        else:
++                            cv_text = extract_text_from_pdf(file_bytes)
+                         if not cv_text:
+                             logger.warning(
+                                 "Il file %s sembra vuoto o non contiene testo estratto.", filename
+                             )
+-                            # continuiamo comunque – Groq riceverà una stringa vuota
++                            # continuiamo comunque – il modello riceverà una stringa vuota
+ 
+-                        # ---- 2️⃣ Analisi con Groq ----
++                        # ---- 2️⃣ Analisi AI: Groq (cloud, default) oppure Ollama (locale) ----
+                         try:
+-                            groq_result = call_groq_for_cv(cv_text)
+-                        except Exception as exc:  # qualsiasi errore Groq
++                            if ai_provider == "ollama":
++                                groq_result = call_ollama_for_cv(cv_text)
++                            else:
++                                groq_result = call_groq_for_cv(cv_text)
++                        except Exception as exc:  # qualsiasi errore del provider AI
+                             logger.exception(
+-                                "Analisi Groq fallita per allegato %s", filename
++                                "Analisi AI (%s) fallita per allegato %s", ai_provider, filename
+                             )
+                             continue  # passa al prossimo allegato/email
+ 
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 5e3e911..252c33a 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -18,4 +18,5 @@ PyJWT
+ websockets
+ groq>=1.2.0
+ pdfminer.six
+-pypdf
+\ No newline at end of file
++pypdf
++PyMuPDF
+\ No newline at end of file
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 9e193a2..b609b91 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -75,6 +75,16 @@ services:
+       - REDIS_URL=redis://redis:6379/0
+       - SMTP_SERVER=mailhog
+       - SMTP_PORT=1025
++      # --- Pipeline AI locale (alternativa a Groq, vedi .env.example) ---
++      # Ollama è già in esecuzione sull'host (con GPU RX 6600 attiva), non in un container:
++      # il worker lo raggiunge tramite host.docker.internal.
++      - AI_PROVIDER=${AI_PROVIDER:-groq}
++      - OLLAMA_BASE_URL=http://host.docker.internal:11434
++      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
++    extra_hosts:
++      # Su Linux, a differenza di Docker Desktop, questo DNS non esiste di default:
++      # va mappato esplicitamente al gateway dell'host.
++      - "host.docker.internal:host-gateway"
+     depends_on:
+       db:
+         condition: service_healthy
