@@ -23,7 +23,7 @@ graph TD
     end
 
     subgraph External
-        AI[Groq API / Llama 3.3<br/>CV Analysis]
+        AI[OpenRouter API / Vision-Language<br/>Qwen2-VL & Specialized Parser]
     end
 
     UI -->|REST / JWT| API
@@ -44,14 +44,20 @@ graph TD
 | --- | --- | --- |
 | **Frontend** | React 18, TypeScript, Tailwind CSS | Type-safety e sviluppo rapido di interfacce reattive e manutenibili. |
 | **Backend API** | Python, FastAPI, Uvicorn | Performance asincrone native e validazione dati robusta tramite Pydantic. |
-| **Task Queue** | Celery, Redis | Gestione affidabile di operazioni I/O-bound (analisi AI) senza bloccare il thread principale dell'API. |
+| **Task Queue** | Celery, Redis | Gestione affidabile di operazioni I/O-bound (analisi AI Vision/Text) senza bloccare il thread principale dell'API. |
 | **Database** | PostgreSQL 16 | Affidabilità, supporto JSONB e integrità referenziale per i dati strutturati dei candidati. |
-| **Infrastructure** | Docker, Docker Compose | Riproducibilità dell'ambiente di sviluppo e isolamento netto dei servizi. |
+| **Infrastructure** | Docker, Poppler | Supporto alla pipeline Vision (conversione PDF -> Immagini) e isolamento netto dei servizi. |
 | **Testing** | MailHog | Sandbox SMTP per testare flussi di notifica in isolamento, senza inquinare ambienti reali. |
 
 ## Scelte Architetturali (Architecture Decision Records)
 
-1. **Separazione API / Worker (Pattern Producer-Consumer)**  
+1. **Analisi Multi-livello (Vision & Text)**
+   Il sistema adotta una pipeline di parsing CV a tre livelli per garantire massima precisione e resilienza:
+   - **Livello 1: Vision-Language (Specialistica)**. Il PDF viene convertito in immagini e analizzato da modelli Vision (es. Qwen2-VL) per preservare il layout spaziale.
+   - **Livello 2: Lightweight Text (PC Leggeri)**. Estrazione testuale avanzata via PyMuPDF combinata con modelli LLM compatti (8B come Llama 3.1). Ideale per efficienza e rapidità.
+   - **Livello 3: Heavy Text (Fallback)**. Analisi testuale classica con modelli LLM pesanti (Gemma 4, Llama 70B) per gestire testi complessi quando gli altri livelli falliscono.
+
+2. **Separazione API / Worker (Pattern Producer-Consumer)**  
    L'analisi di un PDF e la successiva chiamata a un'API di LLM sono operazioni con latenza variabile (1‑3 secondi). Eseguirle in modo sincrono all'interno della richiesta HTTP avrebbe bloccato i worker di FastAPI, degradando l'esperienza utente sotto carico. Delegando il task a Celery, l'API risponde immediatamente, garantendo alta disponibilità e permettendo al frontend di **fare polling** o, in futuro, usare **WebSocket** per il risultato.  
 
 2. **Scelta di FastAPI rispetto a Django/Flask**  
@@ -66,7 +72,7 @@ graph TD
 ## Prerequisiti  
 
 - [Docker](https://www.docker.com/) e [Docker Compose](https://docs.docker.com/compose/) installati e in esecuzione.  
-- Una API Key valida per [Groq](https://console.groq.com) (per l'analisi AI dei CV).  
+- Una API Key valida per [OpenRouter](https://openrouter.ai/) (per l'analisi AI dei CV).
 
 ## Avvio Rapido (Quick Start)  
 
@@ -84,7 +90,7 @@ L'intera infrastruttura (5 servizi) può essere avviata localmente con un singol
    Crea un file `.env` nella root del progetto basandoti su `.env.example`:  
 
    ```env
-   GROQ_API_KEY=la_tua_api_key_qui
+   OPENROUTER_API_KEY=la_tua_api_key_qui
    # Le altre variabili (DB, Redis, SMTP) sono preconfigurate per l'ambiente Docker locale
    ```
 

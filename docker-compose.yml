@@ -75,13 +75,35 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SMTP_SERVER=mailhog
       - SMTP_PORT=1025
+      # --- Pipeline AI locale (alternativa a Groq, vedi .env.example) ---
+      - AI_PROVIDER=${AI_PROVIDER:-groq}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
+      ollama:
+        condition: service_started
     networks:
       - humflow-network
+
+  # AI LOCALE — pipeline leggera solo testo, alternativa a Groq per PC senza GPU dedicata
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - humflow-network
+    # Se hai una GPU NVIDIA con il Container Toolkit installato, scommenta per accelerare:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
   # FRONTEND REACT
   frontend:
@@ -106,3 +128,4 @@ networks:
 volumes:
   postgres_data:
   uploads_data:
+  ollama_data:

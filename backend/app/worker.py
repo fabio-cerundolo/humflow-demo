@@ -13,8 +13,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 import requests
-import pypdf                     # <-- per l'estrazione testo dal PDF
-from groq import Groq, GroqError # <-- SDK ufficiale Groq
+import pypdf  # <-- per l'estrazione testo dal PDF
+from groq import Groq, GroqError  # <-- SDK ufficiale Groq
 
 from celery import Celery
 from celery.schedules import crontab
@@ -23,10 +23,10 @@ from email.mime.text import MIMEText
 from app.models import Candidate, Skill
 
 from .database import SessionLocal
-from .models import Candidate, Skill   # <-- assicurati che questi import siano corretti
+from .models import Candidate, Skill  # <-- assicurati che questi import siano corretti
 from .templates.gdpr_email import get_art14_html
-
-
+from .services.ollama_processor import call_ollama_for_cv, \
+    extract_text_from_pdf_local  # <-- pipeline locale (AI_PROVIDER=ollama)
 
 # ----------------------------------------------------------------------
 # Logger
@@ -43,7 +43,7 @@ celery_app = Celery(
     "humflow",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["app.worker"],   # was "app.worker.worker"
+    include=["app.worker"],  # was "app.worker.worker"
 )
 
 # Optional Celery tuning (feel free to adapt)
@@ -60,15 +60,17 @@ celery_app.conf.update(
 # ------------------------------------------------------------------
 celery_app.conf.beat_schedule = {
     "ingest-every-30s": {
-        "task": "app.worker.ingest_emails_task",       # was "app.worker.worker.ingest_emails_task"
+        "task": "app.worker.ingest_emails_task",  # was "app.worker.worker.ingest_emails_task"
         "schedule": 30.0,
     },
     "delete-old-candidates": {
-        "task": "app.worker.delete_old_candidates",     # was "app.worker.worker.delete_old_candidates"
+        "task": "app.worker.delete_old_candidates",  # was "app.worker.worker.delete_old_candidates"
         "schedule": crontab(hour=2, minute=0),
     },
 }
-#celery_app.conf.timezone = "UTC"
+
+
+# celery_app.conf.timezone = "UTC"
 
 # ----------------------------------------------------------------------
 # Helper: estrazione testo da PDF (pypdf)
@@ -147,14 +149,14 @@ def call_groq_for_cv(cv_text: str) -> dict:
 
     try:
         completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",   # modello più leggero per evitare rate-limit
+            model="llama-3.1-8b-instant",  # modello più leggero per evitare rate-limit
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
+                {"role": "user", "content": user_prompt},
             ],
-            temperature=0.2,          # basso per risposte più deterministe
+            temperature=0.2,  # basso per risposte più deterministe
             max_tokens=1500,
-            response_format={"type": "json_object"},   # forziamo JSON
+            response_format={"type": "json_object"},  # forziamo JSON
         )
     except GroqError as exc:  # cattura errori di rete, auth, rate‑limit, ecc.
         logger.error("Errore chiamando Groq: %s", exc)
@@ -258,23 +260,28 @@ def ingest_emails_task():
                             continue
 
                         # ---- 1️⃣ Estrai testo dal PDF/DOCX ----
-                        # Nota: pypdf gestisce solo PDF. Per DOCX potremmo usare python-docx,
-                        # ma per semplicità trattiamo entrambi come PDF (il tuo flusso attuale
-                        # probabilmente gestisce solo PDF). Se vuoi supportare DOCX, aggiungi
-                        # qui la logica con python-docx.
-                        cv_text = extract_text_from_pdf(file_bytes)
+                        # AI_PROVIDER=ollama -> pipeline locale leggera (estrazione con PyMuPDF)
+                        # AI_PROVIDER=groq (default, invariato) -> estrazione con pypdf
+                        ai_provider = os.getenv("AI_PROVIDER", "groq").lower()
+                        if ai_provider == "ollama":
+                            cv_text = extract_text_from_pdf_local(file_bytes)
+                        else:
+                            cv_text = extract_text_from_pdf(file_bytes)
                         if not cv_text:
                             logger.warning(
                                 "Il file %s sembra vuoto o non contiene testo estratto.", filename
                             )
-                            # continuiamo comunque – Groq riceverà una stringa vuota
+                            # continuiamo comunque – il modello riceverà una stringa vuota
 
-                        # ---- 2️⃣ Analisi con Groq ----
+                        # ---- 2️⃣ Analisi AI: Groq (cloud, default) oppure Ollama (locale) ----
                         try:
-                            groq_result = call_groq_for_cv(cv_text)
-                        except Exception as exc:  # qualsiasi errore Groq
+                            if ai_provider == "ollama":
+                                groq_result = call_ollama_for_cv(cv_text)
+                            else:
+                                groq_result = call_groq_for_cv(cv_text)
+                        except Exception as exc:  # qualsiasi errore del provider AI
                             logger.exception(
-                                "Analisi Groq fallita per allegato %s", filename
+                                "Analisi AI (%s) fallita per allegato %s", ai_provider, filename
                             )
                             continue  # passa al prossimo allegato/email
 
@@ -304,20 +311,20 @@ def ingest_emails_task():
                         for skill_name in groq_result.get("skills", []):
                             if not skill_name or not isinstance(skill_name, str):
                                 continue
-                            
+
                             # Cerchiamo se la skill esiste già
                             from sqlalchemy import select
                             stmt = select(Skill).where(Skill.name == skill_name.strip())
                             skill = db.execute(stmt).scalar_one_or_none()
-                            
+
                             if not skill:
                                 skill = Skill(name=skill_name.strip())
                                 db.add(skill)
                                 db.flush()
-                            
+
                             if skill not in candidate.skills:
                                 candidate.skills.append(skill)
-                            
+
                             skill_objs.append(skill)
 
                         # ---- 4️⃣ Screening automatico (3 livelli) ----
