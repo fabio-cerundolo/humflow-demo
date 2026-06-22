@@ -140,6 +140,8 @@ def process_cv_file(contents: bytes, filename: str, db: Session, source_email=No
         candidate.name = name
         candidate.phone = phone
         candidate.cv_file_path = file_path
+        candidate.cv_filename = filename
+        candidate.cv_data = contents
         candidate.status = "new"
     else:
         candidate = Candidate(
@@ -147,7 +149,9 @@ def process_cv_file(contents: bytes, filename: str, db: Session, source_email=No
             email=email,
             phone=phone,
             status="new",
-            cv_file_path=file_path
+            cv_file_path=file_path,
+            cv_filename=filename,
+            cv_data=contents
         )
 
     # Trova o crea i record delle skill nel database

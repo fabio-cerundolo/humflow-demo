@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { api, Candidate, Stats } from "../lib/api";
+import { api, Candidate, Stats, API_URL } from "../lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,7 +40,7 @@ interface ArchiveRow {
   match: number;
   date: string;
   tags: string[];
-  cv_file_path: string | null;
+  cv_filename: string | null;
 }
 
 // Shared layout transition — smooth, expo-ish curve
@@ -281,12 +281,12 @@ function TimelineCard({ c, last }: { c: PipelineCandidate; last: boolean }) {
     >
       <span
         className={`absolute -left-[7px] top-1.5 size-3 rounded-full ring-4 ring-paper ${c.status === "Matchato"
-            ? "bg-emerald-mid"
-            : c.status === "In Analisi"
-              ? "bg-gold"
-              : c.status === "Nuovo"
-                ? "bg-ink/30"
-                : "bg-red-500"
+          ? "bg-emerald-mid"
+          : c.status === "In Analisi"
+            ? "bg-gold"
+            : c.status === "Nuovo"
+              ? "bg-ink/30"
+              : "bg-red-500"
           }`}
       />
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -601,14 +601,14 @@ function ArchiveSection({
               </select>
 
               {/* Pulsante Download CV */}
-              {r.cv_file_path ? (
+              {r.cv_filename ? (  // <-- cambia da cv_file_path a cv_filename
                 <button
                   onClick={() => handleDownload(r.id, r.name)}
                   disabled={downloadingId === r.id}
                   title={downloadError?.id === r.id ? downloadError.msg : 'Scarica CV'}
                   className={`text-[10px] font-mono px-2 py-1 rounded transition-colors flex items-center gap-1 ${downloadError?.id === r.id
-                      ? 'bg-red-500/10 text-red-500'
-                      : 'bg-emerald-mid/10 text-emerald-mid hover:bg-emerald-mid/20'
+                    ? 'bg-red-500/10 text-red-500'
+                    : 'bg-emerald-mid/10 text-emerald-mid hover:bg-emerald-mid/20'
                     } ${downloadingId === r.id ? 'opacity-50 cursor-wait' : ''}`}
                 >
                   {downloadingId === r.id ? (
@@ -1469,12 +1469,34 @@ function AppContainer() {
       match: match,
       date: new Date(c.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }),
       tags: c.skills ? c.skills.slice(0, 3) : [],
-      cv_file_path: c.cv_file_path,
+      cv_filename: (c.cv_filename && c.cv_filename.trim() !== "") ? c.cv_filename : null,
     };
   });
 
   const handleDownloadCv = async (id: number, name: string) => {
-    await api.downloadCv(token, id, name);
+    try {
+      const response = await fetch(`${API_URL}/api/candidates/${id}/cv`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Errore nel download');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CV_${name}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Impossibile scaricare il CV');
+      throw err;
+    }
   };
 
   // 🔥 FIX: Durante il primo render (server e client), mostra sempre un loader

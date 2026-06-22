@@ -1,6 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface Candidate {
+  [x: string]: null;
   id: number;
   name: string | null;
   email: string;
@@ -8,7 +9,7 @@ export interface Candidate {
   skills: string[];
   status: 'new' | 'reviewed' | 'shortlisted' | 'rejected';
   rejection_reason: string | null;
-  cv_file_path: string | null;
+  cv_filename: string | null;
   created_at: string;
 }
 
@@ -102,28 +103,25 @@ export const api = {
     return res.json();
   },
 
-  downloadCv: async (token: string | null, id: number, candidateName: string) => {
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+  downloadCv: async (token: string | null, candidateId: number, fileName?: string) => {
+    const response = await fetch(`${API_URL}/api/candidates/${candidateId}/cv`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Errore nel download del CV');
     }
-    const res = await fetch(`${API_URL}/candidates/${id}/download`, { headers });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || 'CV non disponibile');
-    }
-    const blob = await res.blob();
-    const contentDisposition = res.headers.get('Content-Disposition') || '';
-    const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-    const filename = filenameMatch ? filenameMatch[1] : `CV_${candidateName}.pdf`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName || `CV_${candidateId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 
   uploadCv: async (token: string | null, file: File) => {

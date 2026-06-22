@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, func
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Table, func, LargeBinary
 from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime
 
@@ -27,6 +27,8 @@ class Candidate(Base):
     rejection_reason = Column(String, nullable=True)
     cv_file_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    cv_filename = Column(String, nullable=True)
+    cv_data = Column(LargeBinary, nullable=True)
     
     # Collega il candidato alle skill tramite la tabella di giunzione
     skills = relationship("Skill", secondary=candidate_skills, backref="candidates")

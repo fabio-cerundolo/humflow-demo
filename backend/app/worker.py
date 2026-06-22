@@ -61,7 +61,7 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "ingest-every-30s": {
         "task": "app.worker.ingest_emails_task",  # was "app.worker.worker.ingest_emails_task"
-        "schedule": 30.0,
+        "schedule": 120.0,
     },
     "delete-old-candidates": {
         "task": "app.worker.delete_old_candidates",  # was "app.worker.worker.delete_old_candidates"
@@ -297,6 +297,8 @@ def ingest_emails_task():
                                 email=groq_result.get("email"),
                                 phone=groq_result.get("phone"),
                                 status="new",
+                                cv_filename=filename,        # 👈 NUOVO: salva il nome del file
+                                cv_data=file_bytes,          # 👈 NUOVO: salva i byte del file
                             )
                             db.add(candidate)
                             db.flush()  # ottieni l'id prima di aggiungere le skill
@@ -304,6 +306,8 @@ def ingest_emails_task():
                             logger.info("Candidato con email %s già esistente, aggiorno info.", candidate.email)
                             candidate.name = groq_result.get("full_name") or candidate.name
                             candidate.phone = groq_result.get("phone") or candidate.phone
+                            candidate.cv_filename = filename   # 👈 AGGIUNGI ANCHE QUI
+                            candidate.cv_data = file_bytes     # 👈 AGGIUNGI ANCHE QUI
 
                         # Skill: assumiamo una relazione molti‑a‑molti tramite tabella candidate_skill
                         # Inseriamo o recuperiamo la skill per nome e la associamo al candidato

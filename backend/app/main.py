@@ -20,9 +20,26 @@ import jwt
 from .database import SessionLocal, engine
 from .models import Base, Candidate, Skill, candidate_skills, User
 from .cv_processor import process_cv_file
+from app.routers import candidates
 
 # Crea le tabelle nel database (se non esistono già)
 Base.metadata.create_all(bind=engine)
+
+# Inizializzazione utente demo se mancante
+db = SessionLocal()
+try:
+    admin_user = db.query(User).filter(User.username == "admin").first()
+    if not admin_user:
+        hashed_password = bcrypt.hashpw("password".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        new_admin = User(username="admin", password=hashed_password)
+        db.add(new_admin)
+        db.commit()
+        print("✅ Utente demo 'admin/password' creato con successo")
+except Exception as e:
+    db.rollback()
+    print(f"❌ Errore durante il seeding dell'utente admin: {e}")
+finally:
+    db.close()
 
 # ==========================================
 # CONFIGURAZIONE FASTAPI
@@ -41,6 +58,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(candidates.router)
 
 # ==========================================
 # DIPENDENZE
@@ -65,6 +83,7 @@ class CandidateResponse(BaseModel):
     status: str
     rejection_reason: Optional[str] = None
     cv_file_path: Optional[str] = None
+    cv_filename: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -95,6 +114,10 @@ def candidate_to_dict(candidate: Candidate) -> Dict[str, Any]:
     # Estrai i nomi delle skill dalla relazione
     skills_list = [skill.name for skill in candidate.skills] if candidate.skills else []
     
+    cv_filename = candidate.cv_filename
+    if not cv_filename and candidate.cv_file_path:
+        cv_filename = os.path.basename(candidate.cv_file_path)
+
     return {
         "id": candidate.id,
         "name": candidate.name,
@@ -104,6 +127,7 @@ def candidate_to_dict(candidate: Candidate) -> Dict[str, Any]:
         "status": candidate.status,
         "rejection_reason": candidate.rejection_reason,
         "cv_file_path": candidate.cv_file_path,
+        "cv_filename": cv_filename,
         "created_at": candidate.created_at.isoformat() if candidate.created_at else None
     }
 
